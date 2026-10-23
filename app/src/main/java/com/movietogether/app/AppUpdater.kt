@@ -221,7 +221,7 @@ object AppUpdater {
     // ---------------------------------------------------------------- Public distribution and legacy migration
 
     // Public channel metadata. No GitHub credentials or source access are required.
-    private val updateManifestBase = "https://n2k02.github.io/mradio/updates"
+    private val updateManifestBase = "https://n2k02.github.io/movietogether/updates"
 
     private suspend fun publishedRelease(experimental: Boolean): Release? = withContext(Dispatchers.IO) {
         val channel = if (experimental) "experimental" else "stable"
@@ -252,7 +252,7 @@ object AppUpdater {
                 apkName = o.getString("apkName"),
                 apkSize = o.optLong("apkSize"),
                 sha256 = sha256,
-                pageUrl = o.optString("pageUrl").ifBlank { "https://n2k02.github.io/mradio/download/" },
+                pageUrl = o.optString("pageUrl").ifBlank { "https://github.com/N2K02/MovieTogether/releases" },
                 experimental = experimental,
             )
         } finally {
