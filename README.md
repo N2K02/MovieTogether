@@ -1,19 +1,17 @@
-# MovieTogether — Android Project
+# MovieTogether
 
-MovieTogether is an Android project repository. The app description, supported Android versions, setup instructions, and source code will be documented here when the implementation is published.
+Android sample application based on the MRadio project structure, Material 3 theme and updater.
 
-## Download
+- Android 8.0+ (API 26)
+- Package: `com.movietogether.app`
+- Custom purple clapperboard adaptive launcher icon
+- Home, Settings and About & updates
+- MRadio update state machine and update card, pointed to this repository
+- GitHub Actions PR experimental APK build and artifact
 
-**No APK has been published yet.** When a build is released, it will be listed here:
+## Experimental build
+Open a pull request to `main`. Download the `MovieTogether-experimental-*` artifact from Actions or the prerelease APK from Releases.
 
-- [Latest release / APK download](https://github.com/N2K02/MovieTogether/releases/latest)
-- [All releases](https://github.com/N2K02/MovieTogether/releases)
+**Signing:** experimental APKs are debug-signed by CI. Production signing and stable release distribution require a new MovieTogether signing key and dedicated workflow. Never reuse MRadio signing keys. The updater verifies package name and signing identity; debug builds are only mutually update-compatible if their signing key is stable.
 
-## Project status
-
-This repository is currently empty. There is no source code or installable APK available from this repository at this time.
-
-## Links
-
-- [Source repository](https://github.com/N2K02/MovieTogether)
-- [Report an issue](https://github.com/N2K02/MovieTogether/issues)
+This is a working starter UI; synchronized playback and movie-room backend are not implemented yet.
