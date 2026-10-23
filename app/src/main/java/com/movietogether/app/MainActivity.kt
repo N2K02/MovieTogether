@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,7 +30,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MovieTogetherApp() {
     var page by remember { mutableStateOf(0) }
-    var settingsPage by remember { mutableStateOf(false) }
+    var settingsPage by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = page == 1 && settingsPage) { settingsPage = false }
     val updaterState by AppUpdater.state.collectAsState()
     val updateAvailable = updaterState.hasPendingUpdate()
     Scaffold(
@@ -53,36 +56,35 @@ private fun MovieTogetherApp() {
                     }
                 }
             } else if (!settingsPage) {
-                Text("Settings", style = MaterialTheme.typography.headlineSmall)
-                HorizontalDivider()
                 ListItem(
                     headlineContent = { Text("About & updates") },
                     supportingContent = { Text(if (updateAvailable) "A new update is available" else "App version and update checks") },
                     leadingContent = { Icon(Icons.Default.Info, null) },
-                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() else Icon(Icons.Default.ChevronRight, null) },
+                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() },
                     modifier = Modifier.clickable { settingsPage = true },
                 )
             } else {
                 ListItem(
                     headlineContent = { Text("MovieTogether") },
                     supportingContent = { Text("Version ${AppUpdater.installedVersionName}") },
-                    leadingContent = { Icon(Icons.Default.Movie, null) },
+                    leadingContent = { Icon(Icons.Default.Settings, null) },
                 )
                 val experimental by AppUpdater.experimentalEnabled.collectAsState()
                 ListItem(
                     headlineContent = { Text("Experimental updates") },
-                    supportingContent = { Text("Offer APKs from successful pull request builds. Test builds may contain bugs.") },
+                    supportingContent = { Text("Offer signed APKs from successful pull request builds. Test builds may have bugs.") },
                     trailingContent = { Switch(checked = experimental, onCheckedChange = AppUpdater::setExperimentalEnabled) },
+                    modifier = Modifier.clickable { AppUpdater.setExperimentalEnabled(!experimental) },
                 )
                 HorizontalDivider()
                 ListItem(
                     headlineContent = { Text("Check for updates") },
-                    supportingContent = { Text(if (updateAvailable) "Update available — review below" else if (experimental) "Check experimental builds and official releases" else "Check official GitHub releases") },
+                    supportingContent = { Text(if (updateAvailable) "Update available — review below" else if (experimental) "Check latest green PR build and official releases" else "Check official GitHub releases") },
                     leadingContent = { Icon(Icons.Default.SystemUpdate, null) },
-                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() else Icon(Icons.Default.ChevronRight, null) },
+                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() },
                     modifier = Modifier.clickable { AppUpdater.check(manual = true) },
                 )
-                UpdateCard(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
+                UpdateCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
         }
     }
