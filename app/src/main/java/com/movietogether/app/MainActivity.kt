@@ -40,7 +40,7 @@ private fun MovieTogetherApp() {
             if (page == 0) {
                 Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
                 Text("Watch together", style = MaterialTheme.typography.headlineMedium)
-                Text("Your shared movie night starts here. This starter app includes the MRadio-style navigation, theme, and update experience.")
+                Text("Your shared movie night starts here. Explore the MovieTogether sample and manage updates from Settings.")
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Movie room", style = MaterialTheme.typography.titleLarge)
