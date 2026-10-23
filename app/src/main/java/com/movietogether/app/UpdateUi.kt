@@ -99,7 +99,7 @@ fun UpdateCard(modifier: Modifier = Modifier) {
                     is AppUpdater.State.UpToDate -> {
                         Title("You're up to date")
                         Text(
-                            "MRadio v${AppUpdater.installedVersionName} is the latest version.",
+                            "MovieTogether v${AppUpdater.installedVersionName} is the latest version.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
