@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,11 +28,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MovieTogetherApp() {
     var page by remember { mutableStateOf(0) }
+    var settingsPage by remember { mutableStateOf(false) }
+    val updaterState by AppUpdater.state.collectAsState()
+    val updateAvailable = updaterState.hasPendingUpdate()
     Scaffold(
-        topBar = { TopAppBar(title = { Text(if (page == 0) "MovieTogether" else "Settings") }) },
+        topBar = { TopAppBar(title = { Text(if (page == 0) "MovieTogether" else if (settingsPage) "About & updates" else "Settings") },
+            navigationIcon = { if (page == 1 && settingsPage) IconButton(onClick = { settingsPage = false }) { Icon(Icons.Default.ArrowBack, "Back to settings") } }) },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(selected = page == 0, onClick = { page = 0 }, icon = { Icon(Icons.Default.Movie, null) }, label = { Text("Home") })
+                NavigationBarItem(selected = page == 0, onClick = { page = 0; settingsPage = false }, icon = { Icon(Icons.Default.Movie, null) }, label = { Text("Home") })
                 NavigationBarItem(selected = page == 1, onClick = { page = 1 }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") })
             }
         }
@@ -47,16 +52,37 @@ private fun MovieTogetherApp() {
                         Text("Room creation, invitations and synchronized playback will be added in the next phase.")
                     }
                 }
+            } else if (!settingsPage) {
+                Text("Settings", style = MaterialTheme.typography.headlineSmall)
+                HorizontalDivider()
+                ListItem(
+                    headlineContent = { Text("About & updates") },
+                    supportingContent = { Text(if (updateAvailable) "A new update is available" else "App version and update checks") },
+                    leadingContent = { Icon(Icons.Default.Info, null) },
+                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() else Icon(Icons.Default.ChevronRight, null) },
+                    modifier = Modifier.clickable { settingsPage = true },
+                )
             } else {
-                Text("About & updates", style = MaterialTheme.typography.headlineSmall)
-                Text("MovieTogether · v${AppUpdater.installedVersionName}")
+                ListItem(
+                    headlineContent = { Text("MovieTogether") },
+                    supportingContent = { Text("Version ${AppUpdater.installedVersionName}") },
+                    leadingContent = { Icon(Icons.Default.Movie, null) },
+                )
                 val experimental by AppUpdater.experimentalEnabled.collectAsState()
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("Experimental updates", modifier = Modifier.weight(1f))
-                    Switch(checked = experimental, onCheckedChange = { AppUpdater.setExperimentalEnabled(it) })
-                }
-                Button(onClick = { AppUpdater.check(manual = true) }, modifier = Modifier.fillMaxWidth()) { Text("Check again") }
-                UpdateCard()
+                ListItem(
+                    headlineContent = { Text("Experimental updates") },
+                    supportingContent = { Text("Offer APKs from successful pull request builds. Test builds may contain bugs.") },
+                    trailingContent = { Switch(checked = experimental, onCheckedChange = AppUpdater::setExperimentalEnabled) },
+                )
+                HorizontalDivider()
+                ListItem(
+                    headlineContent = { Text("Check for updates") },
+                    supportingContent = { Text(if (updateAvailable) "Update available — review below" else if (experimental) "Check experimental builds and official releases" else "Check official GitHub releases") },
+                    leadingContent = { Icon(Icons.Default.SystemUpdate, null) },
+                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() else Icon(Icons.Default.ChevronRight, null) },
+                    modifier = Modifier.clickable { AppUpdater.check(manual = true) },
+                )
+                UpdateCard(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
             }
         }
     }
