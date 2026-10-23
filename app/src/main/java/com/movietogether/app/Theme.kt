@@ -9,7 +9,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// A consistent radio-first palette. In particular, opaque surfaces prevent station
+// A consistent movie-night palette. In particular, opaque surfaces prevent station
 // rows from bleeding through the bottom navigation on edge-to-edge phones.
 private val MovieDark = darkColorScheme(
     primary = Color(0xFFCCA6FF),
