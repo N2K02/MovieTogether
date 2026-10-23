@@ -23,10 +23,31 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.0'
+      - name: Resolve version from existing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | sed -nE 's/^v([0-9]+[.][0-9])$/\1/p' | sort -V | tail -1 || true)
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            version="${last:-1.0}"
+            suffix="-experimental.$GITHUB_RUN_NUMBER"
+          elif [ -z "$last" ]; then
+            version="1.0"
+            suffix=""
+          else
+            n=$(( ${last%.*} * 10 + ${last#*.} + 1 ))
+            version="$(( n / 10 )).$(( n % 10 ))"
+            suffix=""
+          fi
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "APP_SUFFIX=$suffix" >> "$GITHUB_ENV"
+          echo "APP_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
       - name: Verify and build
         run: |
           gradle --no-daemon testDebugUnitTest lintDebug
-          gradle --no-daemon assembleDebug -PappVersion=1.0 -PappVersionCode=${{ github.run_number }} -PappVersionSuffix=-experimental.${{ github.run_number }}
+          gradle --no-daemon assembleDebug -PappVersion="$APP_VERSION" -PappVersionCode="$APP_CODE" -PappVersionSuffix="$APP_SUFFIX"
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
         with:
