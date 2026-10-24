@@ -83,9 +83,6 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
         }
     }
 
-    funJoin@ run {
-        // Explicit manual and deep link invitations use identical parsing and validation below.
-    }
 
     LaunchedEffect(incomingInvitation) {
         if (incomingInvitation != null) {
