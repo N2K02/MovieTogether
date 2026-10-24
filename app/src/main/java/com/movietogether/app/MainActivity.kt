@@ -54,12 +54,15 @@ private enum class Screen { HOME, HOST, GUEST, SETTINGS, UPDATES }
 @Composable
 private fun MovieTogetherApp(incomingInvitation: String?) {
     val context = LocalContext.current
-    var page by remember { mutableStateOf(Screen.HOME) }
+    var page by rememberSaveable { mutableStateOf(Screen.HOME) }
     var joinText by rememberSaveable { mutableStateOf("") }
     var advertisedHost by rememberSaveable { mutableStateOf("") }
     var selectedFileString by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedFile = selectedFileString?.let(Uri::parse)
-    var currentGuest by remember { mutableStateOf<RoomAddress?>(null) }
+    var currentGuestString by rememberSaveable { mutableStateOf<String?>(null) }
+    val currentGuest = remember(currentGuestString) {
+        currentGuestString?.let { runCatching { RoomAddress.parse(it) }.getOrNull() }
+    }
     var joinError by remember { mutableStateOf<String?>(null) }
     var displayName by rememberSaveable { mutableStateOf("Guest") }
 
@@ -92,7 +95,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             if (host.running) { joinError = "End your hosted room before joining another"; return@LaunchedEffect }
             runCatching { RoomAddress.parse(incomingInvitation) }
                 .onSuccess { address ->
-                    currentGuest = address
+                    currentGuestString = address.appLink
                     RoomRuntime.joinRoom(address)
                     page = Screen.GUEST
                     joinError = null
@@ -176,7 +179,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                 runCatching { RoomAddress.parse(joinText) }
                                     .onSuccess { address ->
                                         RoomRuntime.leaveRoom()
-                                        currentGuest = address
+                                        currentGuestString = address.appLink
                                         selectedFileString = null
                                         RoomRuntime.joinRoom(address)
                                         page = Screen.GUEST
@@ -251,7 +254,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         }
                         OutlinedButton(onClick = {
                             RoomRuntime.leaveRoom()
-                            currentGuest = null
+                            currentGuestString = null
                             page = Screen.HOME
                         }) { Text("Leave room") }
                     }
