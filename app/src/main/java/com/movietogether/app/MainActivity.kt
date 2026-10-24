@@ -66,7 +66,7 @@ private fun MovieTogetherApp() {
     BackHandler(enabled = page == 1 && settingsPage) { settingsPage = false }
 
     val updaterState by LiveUpdater.controller.status.collectAsState()
-    val updateAvailable = updaterState.hasPendingUpdate()
+    val updateAvailable = dev.n2k02.updater.hasPendingUpdate(updaterState)
 
     Scaffold(
         topBar = {
@@ -92,7 +92,11 @@ private fun MovieTogetherApp() {
                 NavigationBarItem(
                     selected = page == 1,
                     onClick = { page = 1 },
-                    icon = { Icon(Icons.Rounded.Settings, null) },
+                    icon = {
+                        dev.n2k02.updater.N2K02UpdateBadgedIcon(updaterState) {
+                            Icon(Icons.Rounded.Settings, "Settings")
+                        }
+                    },
                     label = { Text("Settings") },
                 )
             }
@@ -135,7 +139,7 @@ private fun MovieTogetherApp() {
                         Text(if (updateAvailable) "A new update is available" else "App version and update checks")
                     },
                     leadingContent = { Icon(Icons.Rounded.Info, null) },
-                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() },
+                    trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updaterState) },
                     modifier = Modifier.clickable { settingsPage = true },
                 )
             } else {
