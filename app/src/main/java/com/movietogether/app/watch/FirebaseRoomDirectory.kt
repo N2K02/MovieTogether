@@ -76,6 +76,10 @@ object FirebaseRoomDirectory {
     /** Publish an unguessable room code to resolve the host's current address. */
     fun publish(context: Context, address: RoomAddress, movieTitle: String) {
         val requestGeneration = ++generation
+        // A refreshed invitation invalidates the previous room code.
+        val previous = publishedRoom
+        publishedRoom = null
+        previous?.removeValue()
         invitation.value = null
         status.value = "Registering room with Firebase…"
         withAuthenticatedRoomDatabase(context, { root, uid ->
