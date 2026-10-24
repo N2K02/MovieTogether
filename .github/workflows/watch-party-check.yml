@@ -1,7 +1,7 @@
 name: Watch-party checks (no APK published)
 on:
   push:
-    branches: [feature/internet-watch-party]
+    branches: [feature/internet-watch-party, feature/firebase-room-links]
   workflow_dispatch:
 
 permissions:
@@ -22,5 +22,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+      - name: Configure Firebase only when the project file is supplied
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.MOVIETOGETHER_GOOGLE_SERVICES_JSON_BASE64 }}
+        shell: bash
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            python3 - <<'PY'
+          import json
+          with open('app/google-services.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert data['project_info']['project_id'] == 'movietogether-45988'
+          assert any(c['client_info']['android_client_info']['package_name'] == 'com.movietogether.app'
+                     for c in data.get('client', []))
+          PY
+          fi
       - name: Compile and validate (no release)
         run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
