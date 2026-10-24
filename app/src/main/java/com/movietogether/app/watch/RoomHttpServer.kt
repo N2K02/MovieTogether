@@ -10,8 +10,8 @@ import fi.iki.elonen.NanoHTTPD.Method
 import fi.iki.elonen.NanoHTTPD.Response
 import fi.iki.elonen.NanoHTTPD.Response.Status
 import fi.iki.elonen.NanoWSD
-import fi.iki.elonen.WebSocket
-import fi.iki.elonen.WebSocketFrame
+import fi.iki.elonen.NanoWSD.WebSocket
+import fi.iki.elonen.NanoWSD.WebSocketFrame
 import java.io.FileInputStream
 import java.io.FilterInputStream
 import java.io.IOException
