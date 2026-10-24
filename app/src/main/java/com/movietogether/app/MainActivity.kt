@@ -56,6 +56,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     val context = LocalContext.current
     var page by remember { mutableStateOf(Screen.HOME) }
     var joinText by rememberSaveable { mutableStateOf("") }
+    var advertisedHost by rememberSaveable { mutableStateOf("") }
     var selectedFileString by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedFile = selectedFileString?.let(Uri::parse)
     var currentGuest by remember { mutableStateOf<RoomAddress?>(null) }
@@ -197,11 +198,21 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         Text("Server running · ${host.viewers} connected viewers")
                         val address = host.address
                         if (address != null) {
-                            Text("Network link: ${address.browserUrl}", style = MaterialTheme.typography.bodySmall)
-                            Button(onClick = {
+                            OutlinedTextField(
+                                value = advertisedHost, onValueChange = { advertisedHost = it.trim() },
+                                label = { Text("Public or VPN host address (optional)") },
+                                supportingText = { Text("Use only a reachable public IP/DNS or VPN address with port 8787 forwarded; a new link cannot bypass NAT.") },
+                                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            )
+                            val sharedAddress = if (advertisedHost.isBlank()) address
+                                else runCatching { RoomAddress(advertisedHost, address.port, address.token) }.getOrNull()
+                            if (sharedAddress == null) Text("Invalid host address", color = MaterialTheme.colorScheme.error)
+                            Text("Network link: ${sharedAddress?.browserUrl ?: "(invalid host)"}", style = MaterialTheme.typography.bodySmall)
+                            Button(enabled = sharedAddress != null, onClick = {
+                                val invite = sharedAddress ?: return@Button
                                 val share = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "Watch with me on MovieTogether:\n${address.browserUrl}\n\nApp link: ${address.appLink}")
+                                    putExtra(Intent.EXTRA_TEXT, "Watch with me on MovieTogether:\n${invite.browserUrl}\n\nApp link: ${invite.appLink}")
                                 }
                                 context.startActivity(Intent.createChooser(share, "Share room"))
                             }) {
