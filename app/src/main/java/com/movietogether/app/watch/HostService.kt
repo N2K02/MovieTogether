@@ -90,7 +90,7 @@ class HostService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) { stopSelf() }
 
     override fun onDestroy() {
-        RoomRuntime.stopServer()
+        if (RoomRuntime.host.value.running) RoomRuntime.stopServer()
         super.onDestroy()
     }
 }
