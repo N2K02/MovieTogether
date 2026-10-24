@@ -18,14 +18,11 @@
    Do **not** use public test-mode rules for production. Anonymous authentication grants an anonymous UID,
    not a privileged admin identity. Random 32-character room codes provide unguessable invitation capabilities.
 6. The Firebase Android configuration file must identify this project and this Android package.
-   Put it at `app/google-services.json` locally. The repository ignores this file.
+   The supplied app-specific `app/google-services.json` has now been validated and committed to this private repository's Firebase feature branch. You do not need to upload it again. This file holds public client identifiers, not an Admin SDK credential.
 
 ## CI config
 
-To enable Firebase in CI/release builds, add a GitHub Actions repository secret named
-`MOVIETOGETHER_GOOGLE_SERVICES_JSON_BASE64` containing the Base64 encoding of
-`app/google-services.json`, all on one line. CI decodes this into `app/google-services.json`
-**before Gradle runs** and verifies the project ID and application ID.
+Firebase Android client configuration is tracked at `app/google-services.json`, so the normal Gradle CI build includes it automatically. No GitHub secret is needed for this client config. For an alternate project, the optional existing `MOVIETOGETHER_GOOGLE_SERVICES_JSON_BASE64` Actions secret can replace the file before Gradle runs; CI checks project and Android package identity.
 
 The `google-services.json` client config is not a service-account credential and is not a
 substitute for security rules; keeping it out of source control is a repository hygiene choice.
@@ -64,5 +61,6 @@ exposed to untrusted internet connections.
 
 ## Project details needed if setup is not yet complete
 
-- Android `google-services.json` from Firebase Console.
-- Exact Realtime Database URL (shown at the top of the Data tab); the region determines its hostname.
+- Android `google-services.json`: supplied and integrated, including the database URL `https://movietogether-45988-default-rtdb.firebaseio.com`.
+- Still required: confirm Anonymous Auth is enabled and Realtime Database rules have been published via the **Rules** tab (not Data → Import JSON).
+- For actual end-to-end testing, the host and viewer must use a mutually reachable network; Firebase discovery does not provide video transport through CGNAT.
