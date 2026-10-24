@@ -47,7 +47,10 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?) {
     }
 
     DisposableEffect(player) {
-        onDispose { player.release() }
+        onDispose {
+            if (isHost) RoomRuntime.hostPlayback(player.currentPosition, false)
+            player.release()
+        }
     }
     if (isHost) {
         LaunchedEffect(player) {
