@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import dev.n2k02.updater.hasPendingUpdate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -66,7 +67,7 @@ private fun MovieTogetherApp() {
     BackHandler(enabled = page == 1 && settingsPage) { settingsPage = false }
 
     val updaterState by LiveUpdater.controller.status.collectAsState()
-    val updateAvailable = dev.n2k02.updater.hasPendingUpdate(updaterState)
+    val updateAvailable = updaterState.hasPendingUpdate()
 
     Scaffold(
         topBar = {
