@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import dev.n2k02.updater.hasPendingUpdate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -92,7 +93,11 @@ private fun MovieTogetherApp() {
                 NavigationBarItem(
                     selected = page == 1,
                     onClick = { page = 1 },
-                    icon = { Icon(Icons.Rounded.Settings, null) },
+                    icon = {
+                        dev.n2k02.updater.N2K02UpdateBadgedIcon(updaterState) {
+                            Icon(Icons.Rounded.Settings, "Settings")
+                        }
+                    },
                     label = { Text("Settings") },
                 )
             }
@@ -135,7 +140,7 @@ private fun MovieTogetherApp() {
                         Text(if (updateAvailable) "A new update is available" else "App version and update checks")
                     },
                     leadingContent = { Icon(Icons.Rounded.Info, null) },
-                    trailingContent = { if (updateAvailable) UpdateAvailableBadge() },
+                    trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updaterState) },
                     modifier = Modifier.clickable { settingsPage = true },
                 )
             } else {
