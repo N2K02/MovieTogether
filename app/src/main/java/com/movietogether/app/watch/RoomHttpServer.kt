@@ -4,14 +4,14 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import org.json.JSONObject
-import org.nanohttpd.protocols.http.IHTTPSession
-import org.nanohttpd.protocols.http.NanoHTTPD
-import org.nanohttpd.protocols.http.request.Method
-import org.nanohttpd.protocols.http.response.Response
-import org.nanohttpd.protocols.http.response.Status
-import org.nanohttpd.protocols.websockets.NanoWSD
-import org.nanohttpd.protocols.websockets.WebSocket
-import org.nanohttpd.protocols.websockets.WebSocketFrame
+import fi.iki.elonen.NanoHTTPD
+import fi.iki.elonen.NanoHTTPD.IHTTPSession
+import fi.iki.elonen.NanoHTTPD.Method
+import fi.iki.elonen.NanoHTTPD.Response
+import fi.iki.elonen.NanoHTTPD.Response.Status
+import fi.iki.elonen.NanoWSD
+import fi.iki.elonen.WebSocket
+import fi.iki.elonen.WebSocketFrame
 import java.io.FileInputStream
 import java.io.FilterInputStream
 import java.io.IOException
@@ -46,45 +46,45 @@ internal class RoomHttpServer(
     private fun authorized(session: IHTTPSession): Boolean =
         session.headers["authorization"] == "Bearer $token"
 
-    override fun handleWebSocket(session: IHTTPSession): Response? {
-        if (isWebsocketRequested(session) && (session.uri != "/ws" || !authorized(session))) {
-            return Response.newFixedLengthResponse(Status.UNAUTHORIZED, NanoHTTPD.MIME_PLAINTEXT, "Invalid room invitation")
-        }
-        return super.handleWebSocket(session)
-    }
-
     override fun serve(session: IHTTPSession): Response {
+        // nanohttpd 2.3.1 processes WebSocket upgrades inside NanoWSD.serve.
+        if (isWebsocketRequested(session)) {
+            if (session.uri != "/ws" || !authorized(session)) {
+                return NanoHTTPD.newFixedLengthResponse(Status.UNAUTHORIZED, NanoHTTPD.MIME_PLAINTEXT, "Invalid invitation")
+            }
+            return super.serve(session)
+        }
         if (session.uri == "/health" && session.method == Method.GET) {
-            return Response.newFixedLengthResponse(Status.OK, "application/json", "{\"ok\":true}")
+            return NanoHTTPD.newFixedLengthResponse(Status.OK, "application/json", "{\"ok\":true}")
         }
         if (session.uri.startsWith("/join/") && session.method == Method.GET) {
             if (session.uri.removePrefix("/join/") != token)
-                return Response.newFixedLengthResponse(Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Room closed")
+                return NanoHTTPD.newFixedLengthResponse(Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Room closed")
             val safeTitle = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             val host = session.headers["host"]?.takeIf { it.matches(Regex("[A-Za-z0-9.:-]{1,260}")) }
                 ?: "127.0.0.1:${RoomRuntime.PORT}"
             val hostIp = host.substringBefore(':')
             val appLink = RoomAddress(hostIp, RoomRuntime.PORT, token).appLink
             val html = """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><h2>MovieTogether</h2><p>Join: $safeTitle</p><p><a href="$appLink">Open MovieTogether app</a></p><p>Install the same MovieTogether APK on both phones. The host must be reachable over the network.</p></body></html>"""
-            return Response.newFixedLengthResponse(Status.OK, "text/html; charset=utf-8", html)
+            return NanoHTTPD.newFixedLengthResponse(Status.OK, "text/html; charset=utf-8", html)
                 .apply { addHeader("Cache-Control", "no-store") }
         }
         if (session.uri != "/media") {
-            return Response.newFixedLengthResponse(Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found")
+            return NanoHTTPD.newFixedLengthResponse(Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found")
         }
         if (!authorized(session)) {
-            return Response.newFixedLengthResponse(Status.UNAUTHORIZED, NanoHTTPD.MIME_PLAINTEXT, "Not authorized")
+            return NanoHTTPD.newFixedLengthResponse(Status.UNAUTHORIZED, NanoHTTPD.MIME_PLAINTEXT, "Not authorized")
         }
         if (session.method != Method.GET && session.method != Method.HEAD) {
-            return Response.newFixedLengthResponse(Status.METHOD_NOT_ALLOWED, NanoHTTPD.MIME_PLAINTEXT, "GET or HEAD only")
+            return NanoHTTPD.newFixedLengthResponse(Status.METHOD_NOT_ALLOWED, NanoHTTPD.MIME_PLAINTEXT, "GET or HEAD only")
         }
         val rangeHeader = session.headers["range"]
         val range = RangeParser.parse(rangeHeader, size)
-            ?: return Response.newFixedLengthResponse(Status.RANGE_NOT_SATISFIABLE, NanoHTTPD.MIME_PLAINTEXT, "")
+            ?: return NanoHTTPD.newFixedLengthResponse(Status.RANGE_NOT_SATISFIABLE, NanoHTTPD.MIME_PLAINTEXT, "")
                 .apply { addHeader("Content-Range", "bytes */$size") }
         val code = if (rangeHeader.isNullOrBlank()) Status.OK else Status.PARTIAL_CONTENT
         if (session.method == Method.HEAD) {
-            return Response.newFixedLengthResponse(code, mime, "")
+            return NanoHTTPD.newFixedLengthResponse(code, mime, "")
                 .apply {
                     addHeader("Accept-Ranges", "bytes")
                     addHeader("Content-Length", range.length.toString())
@@ -92,18 +92,18 @@ internal class RoomHttpServer(
                 }
         }
         if (!rangeSlots.tryAcquire()) {
-            return Response.newFixedLengthResponse(Status.SERVICE_UNAVAILABLE, NanoHTTPD.MIME_PLAINTEXT, "Too many streams")
+            return NanoHTTPD.newFixedLengthResponse(Status.SERVICE_UNAVAILABLE, NanoHTTPD.MIME_PLAINTEXT, "Too many streams")
         }
         return try {
             val stream = openRange(range)
-            Response.newFixedLengthResponse(code, mime, stream, range.length).apply {
+            NanoHTTPD.newFixedLengthResponse(code, mime, stream, range.length).apply {
                 addHeader("Accept-Ranges", "bytes")
                 addHeader("Cache-Control", "private, no-store")
                 if (code == Status.PARTIAL_CONTENT) addHeader("Content-Range", "bytes ${range.start}-${range.endInclusive}/$size")
             }
         } catch (e: Exception) {
             rangeSlots.release()
-            Response.newFixedLengthResponse(Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Selected file cannot be streamed")
+            NanoHTTPD.newFixedLengthResponse(Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Selected file cannot be streamed")
         }
     }
 
