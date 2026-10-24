@@ -4,3 +4,5 @@ app/build/
 *.iml
 local.properties
 .idea/
+# Config is supplied locally or through CI secret; do not commit it to the repo.
+app/google-services.json
