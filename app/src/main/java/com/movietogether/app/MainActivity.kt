@@ -69,6 +69,35 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     val host by RoomRuntime.host.collectAsState()
     val guest by RoomRuntime.guest.collectAsState()
     val updaterState by LiveUpdater.controller.status.collectAsState()
+    val cloudInvitation by FirebaseRoomDirectory.invitation.collectAsState()
+    val cloudStatus by FirebaseRoomDirectory.status.collectAsState()
+
+    fun connectInvitation(text: String) {
+        if (host.running) {
+            joinError = "End your hosted room before joining another"
+            return
+        }
+        fun connect(address: RoomAddress) {
+            RoomRuntime.leaveRoom()
+            currentGuestString = address.appLink
+            selectedFileString = null
+            RoomRuntime.joinRoom(address)
+            page = Screen.GUEST
+            joinError = null
+        }
+        val code = FirebaseRoomDirectory.extractCode(text)
+        if (code != null) {
+            joinError = "Looking up Firebase room…"
+            FirebaseRoomDirectory.resolve(context, code) { resolved ->
+                resolved.onSuccess(::connect)
+                    .onFailure { joinError = it.message ?: "Cloud room unavailable" }
+            }
+        } else {
+            runCatching { RoomAddress.parse(text) }
+                .onSuccess(::connect)
+                .onFailure { joinError = "Invalid or unsupported room invitation" }
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -92,15 +121,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     LaunchedEffect(incomingInvitation) {
         if (incomingInvitation != null) {
             joinText = incomingInvitation
-            if (host.running) { joinError = "End your hosted room before joining another"; return@LaunchedEffect }
-            runCatching { RoomAddress.parse(incomingInvitation) }
-                .onSuccess { address ->
-                    currentGuestString = address.appLink
-                    RoomRuntime.joinRoom(address)
-                    page = Screen.GUEST
-                    joinError = null
-                }
-                .onFailure { joinError = "Invalid invitation" }
+            connectInvitation(incomingInvitation)
         }
     }
     BackHandler(enabled = page == Screen.UPDATES) { page = Screen.SETTINGS }
@@ -175,23 +196,12 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                 singleLine = true,
                             )
                             if (joinError != null) Text(joinError!!, color = MaterialTheme.colorScheme.error)
-                            Button(onClick = {
-                                runCatching { RoomAddress.parse(joinText) }
-                                    .onSuccess { address ->
-                                        RoomRuntime.leaveRoom()
-                                        currentGuestString = address.appLink
-                                        selectedFileString = null
-                                        RoomRuntime.joinRoom(address)
-                                        page = Screen.GUEST
-                                        joinError = null
-                                    }
-                                    .onFailure { joinError = "Invalid or unsupported invite link" }
-                            }) { Text("Join watch party") }
+                            Button(onClick = { connectInvitation(joinText) }) { Text("Join watch party") }
                         }
                     }
                     Text(
-                        "No external services: room links work on the same Wi-Fi or with a reachable host IP. " +
-                            "Mobile carrier NAT and router firewalls may block remote connections. Local streaming uses HTTP, not HTTPS.",
+                        "Firebase room codes are available when configured. They find a room, but video still needs " +
+                            "a directly reachable host. Carrier NAT and router firewalls may block playback.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -210,18 +220,28 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                             val sharedAddress = if (advertisedHost.isBlank()) address
                                 else runCatching { RoomAddress(advertisedHost, address.port, address.token) }.getOrNull()
                             if (sharedAddress == null) Text("Invalid host address", color = MaterialTheme.colorScheme.error)
-                            Text("Network link: ${sharedAddress?.browserUrl ?: "(invalid host)"}", style = MaterialTheme.typography.bodySmall)
-                            Button(enabled = sharedAddress != null, onClick = {
-                                val invite = sharedAddress ?: return@Button
+                            Text("Direct link: ${sharedAddress?.browserUrl ?: "(invalid host)"}", style = MaterialTheme.typography.bodySmall)
+                            Text("Firebase: $cloudStatus", style = MaterialTheme.typography.bodySmall)
+                            if (cloudInvitation != null) {
+                                Text("Cloud invitation: $cloudInvitation", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Button(enabled = sharedAddress != null || cloudInvitation != null, onClick = {
                                 val share = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "Watch with me on MovieTogether:\n${invite.browserUrl}\n\nApp link: ${invite.appLink}")
+                                    val invite = cloudInvitation ?: sharedAddress?.appLink.orEmpty()
+                                    putExtra(Intent.EXTRA_TEXT,
+                                        "Watch with me on MovieTogether:\n$invite\n\nDirect network address: ${sharedAddress?.browserUrl.orEmpty()}")
                                 }
                                 context.startActivity(Intent.createChooser(share, "Share room"))
                             }) {
                                 Icon(Icons.Rounded.Share, null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("Share invitation")
+                            }
+                            if (sharedAddress != null && FirebaseRoomDirectory.isAvailable(context)) {
+                                TextButton(onClick = {
+                                    FirebaseRoomDirectory.publish(context, sharedAddress, host.title)
+                                }) { Text("Refresh Firebase room address") }
                             }
                             if (address.host == "127.0.0.1") {
                                 Text("No network IP available. Connect to Wi-Fi first.", color = MaterialTheme.colorScheme.error)
@@ -273,7 +293,9 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         supportingContent = { Text("Port ${RoomRuntime.PORT} · IPv4: ${RoomRuntime.availableIPv4().joinToString().ifBlank { "unavailable" }}") },
                         leadingContent = { Icon(Icons.Rounded.Wifi, null) },
                     )
-                    Text("This release uses direct HTTP/WS links without any relay, TLS, static-IP service or account. Only share rooms on networks you trust.")
+                    Text("Firebase project: movietogether-45988")
+                    Text("Firebase status: $cloudStatus")
+                    Text("Firebase makes invitations easier; it does not relay videos. Direct HTTP/WS has no TLS—only share movies on trusted networks.")
                 }
                 Screen.UPDATES -> {
                     ListItem(
