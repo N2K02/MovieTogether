@@ -53,7 +53,9 @@ class HostService : Service() {
         val uri = intent.getStringExtra("movieUri")?.let(Uri::parse)
         if (uri == null) { stopSelf(); return START_NOT_STICKY }
         try {
-            RoomRuntime.startServer(this, uri, intent.getStringExtra("movieTitle").orEmpty())
+            val title = intent.getStringExtra("movieTitle").orEmpty()
+            RoomRuntime.startServer(this, uri, title)
+            RoomRuntime.host.value.address?.let { FirebaseRoomDirectory.publish(this, it, title) }
         } catch (e: Exception) {
             Log.e("MovieTogether", "Cannot start host", e)
             stopSelf()
@@ -90,6 +92,7 @@ class HostService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) { stopSelf() }
 
     override fun onDestroy() {
+        FirebaseRoomDirectory.endHosting()
         if (RoomRuntime.host.value.running) RoomRuntime.stopServer()
         super.onDestroy()
     }
