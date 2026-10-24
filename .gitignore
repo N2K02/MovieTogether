@@ -4,5 +4,6 @@ app/build/
 *.iml
 local.properties
 .idea/
-# Config is supplied locally or through CI secret; do not commit it to the repo.
-app/google-services.json
+# Firebase client configuration is tracked for this private Android project.
+# Never commit Firebase Admin SDK service-account JSON, private keys, or secrets.
+*service-account*.json
