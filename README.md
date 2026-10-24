@@ -4,19 +4,19 @@ Android watch-party application: **one APK on every device**. The host picks a l
 
 ## Internet limitation — read this first
 
-This edition runs **entirely inside the Android APK** without any Firebase, server hosting, TURN/STUN, registration service, or external gateway.
+This edition keeps **movie streaming inside the host Android APK**. Firebase Realtime Database and anonymous authentication optionally provide room-code discovery; there is still no video relay or external movie storage.
 
 - **Works:** Devices on the same Wi-Fi (unless client isolation is enabled), or connected through a mutually routable private/VPN network.
 - **Sometimes works:** Different networks when the host has a reachable public address and manual port forwarding/firewall configuration.
-- **Does not work automatically:** Carrier-grade NAT, changing private IP addresses, or strict firewalls. Making a new invitation link does **not** bypass those restrictions.
+- **Does not work automatically:** Carrier-grade NAT, changing private IP addresses, or strict firewalls. Firebase codes can point to a new host IP when updated, but cannot create a network path through NAT.
 - **Security:** HTTP/WS is unencrypted. Use trusted networks and do not expose private watch rooms over the public internet without a secure tunnel.
 
 ## How to host
 
 1. Install the same version of the MovieTogether APK on the host phone and guest devices (Android 8.0+).
 2. Connect both devices to the same Wi-Fi network.
-3. In MovieTogether, choose **Create a room** and select a progressive MP4 file (H.264/AAC is recommended).
-4. When the host server starts, tap **Share invitation**. Send the direct URL or custom app link.
+3. In MovieTogether, choose **Create a room** and select a progressive MP4 file (H.264/AAC is recommended). If Firebase is configured, a cloud room code is also registered.
+4. When the host server starts, tap **Share invitation**. Send the Firebase room code link (if configured) or the direct app link.
 5. On a guest phone, open the invitation in MovieTogether or paste the invite link into **Join a room**.
 6. The host controls video playback; guests can watch and exchange text messages.
 7. Tap **End room** or the **Stop sharing** notification action to stop serving the selected file.
@@ -48,3 +48,12 @@ Branch `feature/internet-watch-party` has a checks-only GitHub Actions workflow 
 Full technical plan: [docs/internet-watch-party-plan.md](docs/internet-watch-party-plan.md).
 
 Gradle needs `N2K02_PACKAGES_TOKEN` for private theme and updater GitHub Packages dependencies.
+
+## Firebase room directory
+
+- Firebase project: `movietogether-45988` (Android package `com.movietogether.app`).
+- A validated `app/google-services.json` with the Realtime Database URL is part of this private project.
+- The host publishes an ephemeral, 32-character random cloud room code; viewers resolve it using Firebase Anonymous Authentication and Realtime Database.
+- Firebase does **not** carry video data, enable NAT traversal or guarantee remote playback; guests still access TCP port `8787` on the host's reachable IP/port. Direct HTTP/WS is unencrypted.
+- Firebase Console setup is required: enable anonymous sign-in and publish `firebase/database.rules.json` in **Realtime Database → Rules**. Do not import it under Data.
+- See [Firebase setup](docs/firebase-setup.md).
