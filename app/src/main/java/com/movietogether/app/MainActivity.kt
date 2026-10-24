@@ -56,7 +56,8 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     val context = LocalContext.current
     var page by remember { mutableStateOf(Screen.HOME) }
     var joinText by rememberSaveable { mutableStateOf("") }
-    var selectedFile by remember { mutableStateOf<Uri?>(null) }
+    var selectedFileString by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedFile = selectedFileString?.let(Uri::parse)
     var currentGuest by remember { mutableStateOf<RoomAddress?>(null) }
     var joinError by remember { mutableStateOf<String?>(null) }
     var displayName by rememberSaveable { mutableStateOf("Guest") }
@@ -78,7 +79,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             }.getOrNull() ?: "Selected movie"
             RoomRuntime.leaveRoom()
             HostService.start(context, uri, title)
-            selectedFile = uri
+            selectedFileString = uri.toString()
             page = Screen.HOST
         }
     }
@@ -87,6 +88,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     LaunchedEffect(incomingInvitation) {
         if (incomingInvitation != null) {
             joinText = incomingInvitation
+            if (host.running) { joinError = "End your hosted room before joining another"; return@LaunchedEffect }
             runCatching { RoomAddress.parse(incomingInvitation) }
                 .onSuccess { address ->
                     currentGuest = address
@@ -174,7 +176,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                     .onSuccess { address ->
                                         RoomRuntime.leaveRoom()
                                         currentGuest = address
-                                        selectedFile = null
+                                        selectedFileString = null
                                         RoomRuntime.joinRoom(address)
                                         page = Screen.GUEST
                                         joinError = null
@@ -215,7 +217,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         ChatPanel(displayName, { displayName = it })
                         OutlinedButton(onClick = {
                             HostService.stop(context)
-                            selectedFile = null
+                            selectedFileString = null
                             page = Screen.HOME
                         }) {
                             Icon(Icons.Rounded.Stop, null)
