@@ -1,79 +1,49 @@
-# MovieTogether internet watch-party delivery plan
+# MovieTogether — APK-hosted peer-to-peer internet watch-party plan
 
 Tracking issue: https://github.com/N2K02/MovieTogether/issues/3
 
-## Release strategy
-- One cohesive implementation branch: feature/internet-watch-party
-- No pull request until end-to-end features are ready and tested.
-- Preserve existing experimental build/updater workflow; open one PR for the integrated feature.
-- Do not report internet access working until a public gateway is configured and tested.
+## Non-negotiable design
+The **host Android APK** owns the source movie, movie byte-range service, watch-party session and UI. No VPS, rented video server, Debian VM, or movie cloud upload. Guests also install MovieTogether; future versions update both roles through the existing N2K02 updater. Work in feature/internet-watch-party and submit one integrated PR when complete.
 
-## Roles
-- Host: selects one SAF-accessible local video, starts a watch-party session, distributes its invitation, and controls playback.
-- Viewer: opens HTTPS invitation in same Android APK, joins the room, streams from the host, chats, and follows authoritative playback state.
-- Gateway: public HTTPS/WSS service that maps short-lived room invitations to the host's outbound connection; bridges stream requests and control messages.
+## Physical network constraint
+Generating a new room URL does not yield a public network route to a phone behind cellular carrier-grade NAT, changing IPv4 or a restrictive firewall. A truly global link needs a publicly reachable discovery/signaling component and, where direct ICE fails, a TURN transport relay. This can be a managed service; it does **not** require the developer to administer their own VPS. A completely infrastructure-free solution is best-effort P2P only and cannot guarantee all pairs of users connect.
 
-## Why a gateway is required
-Room links are location-independent identifiers, not a replacement for network reachability.
-Dynamic mobile IPs and CGNAT make incoming connection to an Android phone unreliable.
-Use an outbound authenticated WSS connection from the host and a public relay reachable by viewers.
-No router port forwarding or static IP is necessary for clients.
+## Network topology
+1. Host picks one local file with Storage Access Framework; foreground host session stays in the APK.
+2. APK creates random opaque room ID and authorized guest invite using managed signaling (recommended no-VPS default: Firebase Realtime Database Spark, within quotas).
+3. Host and joiners exchange WebRTC SDP and ICE candidates through signaling only; no media bytes in Firebase.
+4. Use STUN-assisted WebRTC direct data channels for encrypted, authenticated room control/chat and file byte ranges.
+5. Where direct ICE fails, optionally use a managed TURN relay (data usage/possible charges); without one show an actionable connection failure.
+6. Android Media3 uses a custom DataSource to request byte ranges through a peer channel; use backpressure, bounded caches and cancellation. Supports seek.
+7. Host publishes authoritative playback (positionMs, playing, revision, timestamp), heartbeat, presence and chat.
+8. Room closes or expires when hosting ends. Guest link never embeds the host's current IP.
 
-## Protocol v1
-- Use protocolVersion=1 and requestId in all transport messages.
-- Role-scoped room tokens, renewal and expiry; room IDs opaque and unguessable.
-- Host publishes authoritative play/pause/seek state: positionMs, playing, updatedAt, revision.
-- Use server timestamps/RTT estimation, late-join snapshot and bounded drift correction.
-- Chat messages: event ID, author ID, sequence, time, body length limit; no unbounded history.
-- Video byte range: gateway GET /v1/rooms/{room}/video with Range and bearer token;
-  gateway relays request to host via outbound WSS, with streaming binary chunks, bounded queues,
-  flow control, cancellation, 206/416 handling, Accept-Ranges and Content-Range.
-- Heartbeat, room terminated, host offline, reconnect with exponential backoff.
-- Host-only playback controls by default; server validates authorization.
+## Code boundaries
+- app/feature/host: SAF scoped reader, WebRTC host network manager, host foreground session, owner controls.
+- app/feature/viewer: join, room state, Media3 peer-backed DataSource, playback sync, chat.
+- app/core/room: immutable room state, monotonically increasing revisions, roles, membership, permissions, reconnection logic.
+- app/core/protocol: versioned control messages and binary video byte-range requests/chunks.
+- app/core/signaling: interface and optional Firebase implementation; credentials/settings injected through build config, not committed secrets.
+- app/core/transport: WebRTC ICE/data channel adapter with optional secure short-lived TURN credentials.
+- app/core/security: invitation tokens, peer authorization, expiry and revoke.
+- app/feature/ui: M3 Expressive Create, Join, Watch, Chat, Members, Settings, Failure/Retry.
 
-## Proposed modules
-app/
-  core/protocol/
-  core/network/
-  core/player/
-  feature/room/
-  feature/chat/
-  feature/host/
-  feature/viewer/
-  feature/settings/
-gateway/
-  src/rooms/
-  src/security/
-  src/signaling/
-  src/stream/
-  test/
-  deployment/
+## Suggested protocol
+Protocol v1: create, join, offer, answer, ICE candidate, heartbeat, peer-left, playback-state, chat-message, video-request, video-chunk, video-end, video-error, cancel-request. For video include unique request ID, offset and count and bounded chunk size. Use encrypted WebRTC transport and session-level authorization, but treat invite possession as access to the shared content. Avoid leaking invites in logs.
 
-## First integrated release
-- MP4/H.264/AAC progressive stream, initially one host and <= 5 viewers.
-- Media3 player, SAF picker, Material 3 Expressive room/chat UI.
-- Share button with HTTPS App Link and manual join code as fallback.
-- Embedded Android host service with user-visible notification and stop controls.
-- No DRM extraction, transcoding, automatic movie upload, or browser-only viewer.
-- Host must remain online: Android process lifecycle restrictions still apply.
+## Performance and compatibility
+- First release: progressive MP4/H.264/AAC, selected file only, <=5 viewers; no transcoding and no DRM bypass.
+- Estimated host upstream capacity must cover approximate movie bitrate multiplied by concurrent viewers for one-to-one P2P.
+- Screen-lock/background operation follows Android foreground service limits; explicitly test on Pixel 8 Pro.
+- ICE candidate network handoff and peer disconnection must trigger safe recovery, not indefinite stalls.
 
-## Security
-- TLS at gateway, WSS tunnel to host, HTTPS viewer delivery.
-- Invitation tokens scoped to room; short-lived participant tokens, disconnect/revoke support.
-- Room host device is sole media source; never allow arbitrary filesystem paths.
-- Gateway throttles joins/chat/streams and enforces max participants and concurrent byte ranges.
-- Never log bearer tokens, full invitations, private media bytes or chat bodies.
-- End sessions and clear ephemeral room data on host disconnect/expiry.
+## Integration and release gates
+- Android Gradle build/lint/unit tests pass; networking component tests pass.
+- 2+ physical devices on different Wi-Fi/mobile networks, including restrictive NAT fallback or explicit failure without TURN.
+- Video seeking and ranged delivery verify content and size; synchronization, late join and chat pass.
+- Invites revoked/expired and unauthorized byte-range queries rejected.
+- Shareable HTTPS link and App Links trust anchored to a configured public HTTPS origin, including assetlinks.json; fallback join code when unconfigured.
+- Avoid triggering the pull-request workflow until all first-release work is ready; then one final PR and experimental APK.
 
-## Test and acceptance gate
-- Host and two Android viewers on different carrier/Wi-Fi networks.
-- Range requests and seeks return correct bytes; offline host fails closed.
-- Cross-device pause/play/seek and late join align with room state; periodic drift correction.
-- Chat ordering, presence, guest joins, reconnect, stale revision drop.
-- Auth negative cases and revocations covered by automated tests.
-- Android build, lint and tests pass; gateway integration tests pass.
-- App Links verify against public domain and correct APK signing fingerprints.
-- Publicly reachable gateway deployed and tested before final experimental APK.
-
-## Required decision
-Choose gateway hosting: a VPS/domain already owned, a cloud/Cloudflare account, or a new inexpensive VPS. Configuration requires a hostname, TLS, and deployment credentials; do not store them in Git. Public video relay bandwidth scales with bitrate times viewer count.
+## Blocking external input
+Ask owner to approve minimal managed signaling, e.g. Firebase free Spark plan. Firebase configuration and security rules must be provisioned before cross-internet link creation works. To guarantee connections on restrictive NAT, additionally decide on managed TURN service; it carries media traffic and may have charges. If the owner rejects all managed networking infrastructure, limit claims to local-network or best-effort direct P2P.
