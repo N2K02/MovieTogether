@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.movietogether.app.watch.*
 import dev.n2k02.updater.N2K02UpdateScreen
+import dev.n2k02.updater.hasPendingUpdate as hasSharedPendingUpdate
 
 class MainActivity : ComponentActivity() {
     private val incomingInvitation = mutableStateOf<String?>(null)
@@ -288,7 +289,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 Screen.SETTINGS -> {
                     ListItem(
                         headlineContent = { Text("About & updates") },
-                        supportingContent = { Text(if (updaterState.hasPendingUpdate())
+                        supportingContent = { Text(if (updaterState.hasSharedPendingUpdate())
                             "Update available" else "Version and update checks") },
                         leadingContent = { Icon(Icons.Rounded.Info, null) },
                         trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updaterState) },
