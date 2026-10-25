@@ -86,6 +86,23 @@ jobs:
             echo "Download the signed APK below and install it on your phone."
           } > release-notes.md
 
+      - name: Configure Firebase for APK if available
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.MOVIETOGETHER_GOOGLE_SERVICES_JSON_BASE64 }}
+        shell: bash
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            python3 - <<'PY'
+          import json
+          with open('app/google-services.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert data['project_info']['project_id'] == 'movietogether-45988'
+          assert any(c['client_info']['android_client_info']['package_name'] == 'com.movietogether.app'
+                     for c in data.get('client', []))
+          PY
+          fi
+
       - name: Verify unit tests and Android lint
         run: gradle --no-daemon testDebugUnitTest lintDebug
 

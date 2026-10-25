@@ -1,5 +1,9 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.plugin.compose") }
 
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 val appVersion = (findProperty("appVersion") as String?) ?: "1.0"
 val appVersionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 10
 val appVersionSuffix = (findProperty("appVersionSuffix") as String?) ?: ""
@@ -30,6 +34,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.media3:media3-exoplayer:1.6.1")
+    implementation("androidx.media3:media3-ui:1.6.1")
+    implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-database")
     testImplementation("junit:junit:4.13.2")
 }
 

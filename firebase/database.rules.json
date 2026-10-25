@@ -1,0 +1,13 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomCode": {
+        ".read": "auth != null && data.child('expiresAt').val() > now",
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || (data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)))",
+        ".validate": "newData.hasChildren(['ownerUid', 'host', 'port', 'mediaToken', 'expiresAt']) && newData.child('ownerUid').isString() && newData.child('host').isString() && newData.child('port').isNumber() && newData.child('port').val() > 0 && newData.child('port').val() <= 65535 && newData.child('mediaToken').isString() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now"
+      }
+    }
+  }
+}

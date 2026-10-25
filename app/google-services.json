@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1073360589291",
+    "firebase_url": "https://movietogether-45988-default-rtdb.firebaseio.com",
+    "project_id": "movietogether-45988",
+    "storage_bucket": "movietogether-45988.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1073360589291:android:2bac037e846eca1d7fc9ae",
+        "android_client_info": {
+          "package_name": "com.movietogether.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAPOuh5Jd-_pzykbbhzCFOIke6JP5HLnF0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

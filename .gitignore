@@ -4,3 +4,6 @@ app/build/
 *.iml
 local.properties
 .idea/
+# Firebase client configuration is tracked for this private Android project.
+# Never commit Firebase Admin SDK service-account JSON, private keys, or secrets.
+*service-account*.json
