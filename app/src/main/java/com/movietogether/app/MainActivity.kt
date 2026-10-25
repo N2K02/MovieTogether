@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -118,6 +119,17 @@ private fun MovieTogetherApp() {
                         }
                     },
                     label = { Text("Settings") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = {
+                        LiveUpdater.controller.cancel()
+                        (androidx.compose.ui.platform.LocalContext.current as? ComponentActivity)
+                            ?.finishAndRemoveTask()
+                    },
+                    icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
+                    label = { Text("Quit") },
+                    alwaysShowLabel = true,
                 )
             }
         },
