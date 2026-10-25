@@ -6,17 +6,19 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /** External infrastructure is deliberately not used. These addresses are NOT universal internet links. */
-data class RoomAddress(val host: String, val port: Int, val token: String) {
+data class RoomAddress(val host: String, val port: Int, val token: String, val secure: Boolean = false) {
     init {
         require(host.matches(Regex("[a-zA-Z0-9.:-]{1,253}"))) { "Invalid host" }
         require(port in 1..65535) { "Invalid port" }
         require(token.matches(Regex("[A-Za-z0-9_-]{24,128}"))) { "Invalid room key" }
     }
-    val baseUrl: String get() = "http://" + if (host.contains(':')) "[$host]:$port" else "$host:$port"
+    val baseUrl: String get() = (if (secure) "https://" else "http://") +
+        (if (host.contains(':')) "[$host]:$port" else "$host:$port")
     val mediaUrl: String get() = "$baseUrl/media"
-    val wsUrl: String get() = baseUrl.replaceFirst("http:", "ws:") + "/ws"
+    val wsUrl: String get() = baseUrl.replaceFirst("https:", "wss:").replaceFirst("http:", "ws:") + "/ws"
     val browserUrl: String get() = "$baseUrl/join/$token"
-    val appLink: String get() = "movietogether://join?host=$host&port=$port&key=$token"
+    val appLink: String get() = "movietogether://join?host=$host&port=$port&key=$token" +
+        if (secure) "&secure=1" else ""
 
     companion object {
         fun parse(text: String): RoomAddress {
@@ -28,13 +30,19 @@ data class RoomAddress(val host: String, val port: Int, val token: String) {
                         val ix = it.indexOf('=')
                         if (ix <= 0) null else it.substring(0, ix) to URLDecoder.decode(it.substring(ix + 1), "UTF-8")
                     }.toMap()
-                    RoomAddress(pairs.getValue("host"), pairs["port"]?.toIntOrNull() ?: 8787, pairs.getValue("key"))
+                    RoomAddress(pairs.getValue("host"), pairs["port"]?.toIntOrNull() ?: 8787,
+                        pairs.getValue("key"), pairs["secure"] == "1")
                 }
-                "http" -> {
-                    require(uri.userInfo == null) { "Invalid invitation" }
+                "http", "https" -> {
+                    require(uri.userInfo == null && uri.rawQuery.isNullOrEmpty() && uri.fragment == null) {
+                        "Invalid invitation"
+                    }
                     val part = uri.path?.split('/') ?: emptyList()
                     require(part.size == 3 && part[1] == "join") { "Not a MovieTogether invitation" }
-                    RoomAddress(requireNotNull(uri.host), if (uri.port > 0) uri.port else 80, part[2])
+                    val secure = uri.scheme.equals("https", ignoreCase = true)
+                    RoomAddress(requireNotNull(uri.host),
+                        if (uri.port > 0) uri.port else if (secure) 443 else 80,
+                        part[2], secure)
                 }
                 else -> error("Use a MovieTogether invitation or direct HTTP room link")
             }
@@ -53,6 +61,8 @@ data class PlaybackSnapshot(
     val revision: Long = 0,
     val changedBy: String? = null,
     val change: String? = null,
+    // Local monotonic time when this position was observed, never serialized over the wire.
+    val observedAtElapsedMs: Long = 0L,
 )
 
 /** Deterministic, host-owned playback changes; names are display labels, not authenticated identities. */

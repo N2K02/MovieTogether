@@ -60,6 +60,8 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     var page by rememberSaveable { mutableStateOf(Screen.HOME) }
     var joinText by rememberSaveable { mutableStateOf("") }
     var advertisedHost by rememberSaveable { mutableStateOf("") }
+    var advertisedPort by rememberSaveable { mutableStateOf("") }
+    var useSecureProxy by rememberSaveable { mutableStateOf(false) }
     var selectedFileString by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedFile = selectedFileString?.let(Uri::parse)
     var currentGuestString by rememberSaveable { mutableStateOf<String?>(null) }
@@ -107,6 +109,10 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             return
         }
         fun connect(address: RoomAddress) {
+            if (!RoomTransportPolicy.mayConnect(address)) {
+                joinError = RoomTransportPolicy.TLS_REQUIRED_MESSAGE
+                return
+            }
             RoomRuntime.leaveRoom()
             currentGuestString = address.appLink
             lastJoinedString = address.appLink
@@ -244,6 +250,11 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                     Icon(Icons.Rounded.Groups, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
                     Text("Watch together", style = MaterialTheme.typography.headlineMedium)
                     Text("Host a movie from your phone. Everyone installs MovieTogether. No cloud uploads or accounts.")
+                    Text(
+                        "On different networks, the host needs a reachable VPN or HTTPS proxy. " +
+                            "A Firebase invite finds the room but does not carry video.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     OutlinedTextField(
                         value = displayName,
                         onValueChange = { displayName = it.take(30) },
@@ -301,25 +312,88 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         val address = host.address
                         if (address != null) {
                             OutlinedTextField(
-                                value = advertisedHost, onValueChange = { advertisedHost = it.trim() },
-                                label = { Text("Public or VPN host address (optional)") },
-                                supportingText = { Text("Use only a reachable public IP/DNS or VPN address with port 8787 forwarded; a new link cannot bypass NAT.") },
+                                value = advertisedHost,
+                                onValueChange = { advertisedHost = it.trim() },
+                                label = { Text("Reachable IP or DNS (optional)") },
+                                supportingText = {
+                                    Text("For other networks, use an already reachable VPN endpoint " +
+                                        "or an HTTPS reverse proxy; room codes cannot bypass NAT.")
+                                },
                                 modifier = Modifier.fillMaxWidth(), singleLine = true,
                             )
-                            val sharedAddress = if (advertisedHost.isBlank()) address
-                                else runCatching { RoomAddress(advertisedHost, address.port, address.token) }.getOrNull()
-                            if (sharedAddress == null) Text("Invalid host address", color = MaterialTheme.colorScheme.error)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Switch(
+                                    checked = useSecureProxy,
+                                    onCheckedChange = { useSecureProxy = it },
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("HTTPS / WSS reverse proxy")
+                            }
+                            if (useSecureProxy || advertisedHost.isNotBlank()) {
+                                OutlinedTextField(
+                                    value = advertisedPort,
+                                    onValueChange = {
+                                        advertisedPort = it.filter(Char::isDigit).take(5)
+                                    },
+                                    label = { Text(if (useSecureProxy) "Proxy port (default 443)"
+                                        else "Host port (default 8787)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            val port = advertisedPort.toIntOrNull()
+                                ?: if (advertisedPort.isBlank()) {
+                                    if (useSecureProxy) 443 else RoomRuntime.PORT
+                                } else null
+                            val sharedAddress =
+                                when {
+                                    port == null -> null
+                                    useSecureProxy && advertisedHost.isBlank() -> null
+                                    advertisedHost.isBlank() && port == address.port -> address
+                                    advertisedHost.isBlank() -> RoomAddress(address.host, port, address.token)
+                                    else -> runCatching {
+                                        RoomAddress(advertisedHost, port, address.token, useSecureProxy)
+                                    }.getOrNull()
+                                }
+                            if (sharedAddress != null && !RoomTransportPolicy.mayConnect(sharedAddress)) {
+                                Text(
+                                    RoomTransportPolicy.TLS_REQUIRED_MESSAGE,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (sharedAddress == null) Text(
+                                if (useSecureProxy && advertisedHost.isBlank())
+                                    "Enter the HTTPS proxy DNS name to share securely"
+                                else "Invalid host address or port",
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            if (!useSecureProxy && advertisedHost.isNotBlank()) {
+                                Text("Direct HTTP/WS links are unencrypted. For remote networks " +
+                                    "use HTTPS/WSS with a trusted certificate or a private VPN.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
                             Text("Direct link: ${sharedAddress?.browserUrl ?: "(invalid host)"}", style = MaterialTheme.typography.bodySmall)
                             Text("Firebase: $cloudStatus", style = MaterialTheme.typography.bodySmall)
                             if (cloudInvitation != null) {
                                 Text("Cloud invitation: $cloudInvitation", style = MaterialTheme.typography.bodySmall)
                             }
-                            Button(enabled = sharedAddress != null || cloudInvitation != null, onClick = {
+                            Button(
+                                enabled = (sharedAddress != null &&
+                                    RoomTransportPolicy.mayConnect(sharedAddress)) ||
+                                    cloudInvitation != null,
+                                onClick = {
                                 val share = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    val invite = cloudInvitation ?: sharedAddress?.appLink.orEmpty()
+                                    val invite = if (sharedAddress?.secure == true)
+                                        sharedAddress.appLink
+                                    else cloudInvitation ?: sharedAddress?.appLink.orEmpty()
+                                    val details = if (sharedAddress?.secure == true)
+                                        "Secure room: ${sharedAddress.browserUrl}"
+                                    else "Direct network address: ${sharedAddress?.browserUrl.orEmpty()}"
                                     putExtra(Intent.EXTRA_TEXT,
-                                        "Watch with me on MovieTogether:\n$invite\n\nDirect network address: ${sharedAddress?.browserUrl.orEmpty()}")
+                                        "Watch with me on MovieTogether:\n$invite\n\n$details")
                                 }
                                 context.startActivity(Intent.createChooser(share, "Share room"))
                             }) {
@@ -327,10 +401,11 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                 Spacer(Modifier.width(8.dp))
                                 Text("Share invitation")
                             }
-                            if (sharedAddress != null && FirebaseRoomDirectory.isAvailable(context)) {
+                            if (sharedAddress != null && RoomTransportPolicy.mayConnect(sharedAddress) &&
+                                FirebaseRoomDirectory.isAvailable(context)) {
                                 TextButton(onClick = {
                                     FirebaseRoomDirectory.publish(context, sharedAddress, host.title)
-                                }) { Text("Refresh Firebase room address") }
+                                }) { Text("Update Firebase invitation to this address") }
                             }
                             if (address.host == "127.0.0.1") {
                                 Text("No network IP available. Connect to Wi-Fi first.", color = MaterialTheme.colorScheme.error)
@@ -360,8 +435,13 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                             WatchPlayer(Uri.parse(currentGuest!!.mediaUrl), false, currentGuest, displayName)
                         } else {
                             Text(guest.error ?: "Connecting…")
+                            Text(
+                                "MovieTogether retries dropped connections automatically. " +
+                                    "You can also retry now or leave this room.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                             Button(onClick = { RoomRuntime.joinRoom(currentGuest!!) }) {
-                                Text("Rejoin room")
+                                Text("Retry now")
                             }
                         }
                         OutlinedButton(onClick = {

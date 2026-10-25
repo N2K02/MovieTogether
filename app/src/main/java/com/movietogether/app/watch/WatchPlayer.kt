@@ -1,6 +1,7 @@
 package com.movietogether.app.watch
 
 import android.net.Uri
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -72,11 +74,35 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
 
     LaunchedEffect(player, snapshot.revision) {
         if (snapshot.revision > 0) {
-            if (abs(player.currentPosition - snapshot.positionMs) > 1_200L) {
-                player.seekTo(snapshot.positionMs)
+            val target = if (isHost) snapshot.positionMs
+                else PlaybackSyncPolicy.targetPosition(snapshot, SystemClock.elapsedRealtime())
+            if (abs(player.currentPosition - target) >= PlaybackSyncPolicy.DRIFT_TOLERANCE_MS) {
+                player.seekTo(target)
             }
             if (player.playWhenReady != snapshot.playing) {
                 player.playWhenReady = snapshot.playing
+            }
+        }
+    }
+
+    // An independent correction loop also covers drift between 1-second host broadcasts
+    // and resumes after ExoPlayer finishes buffering; do not seek while still loading.
+    if (!isHost) {
+        LaunchedEffect(player) {
+            while (isActive) {
+                val current = RoomRuntime.playback.value
+                if (current.revision > 0 &&
+                    RoomRuntime.guest.value.connected &&
+                    player.playbackState == Player.STATE_READY) {
+                    val target = PlaybackSyncPolicy.targetPosition(current, SystemClock.elapsedRealtime())
+                    if (PlaybackSyncPolicy.shouldSeek(player.currentPosition, target, ready = true)) {
+                        player.seekTo(target)
+                    }
+                    if (player.playWhenReady != current.playing) {
+                        player.playWhenReady = current.playing
+                    }
+                }
+                delay(750L)
             }
         }
     }
@@ -94,7 +120,9 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (isHost) {
             IconButton(onClick = {
-                RoomRuntime.hostSeekTo((player.currentPosition - 10_000L).coerceAtLeast(0))
+                val target = (player.currentPosition - 10_000L).coerceAtLeast(0)
+                player.seekTo(target)
+                RoomRuntime.hostSeekTo(target)
             }) { Icon(Icons.Rounded.Replay10, contentDescription = "Back 10 seconds") }
         }
         Button(onClick = {
@@ -110,7 +138,9 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
         }
         if (isHost) {
             IconButton(onClick = {
-                RoomRuntime.hostSeekTo(player.currentPosition + 10_000L)
+                val target = player.currentPosition + 10_000L
+                player.seekTo(target)
+                RoomRuntime.hostSeekTo(target)
             }) { Icon(Icons.Rounded.Forward10, contentDescription = "Forward 10 seconds") }
         }
     }

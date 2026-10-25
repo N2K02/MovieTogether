@@ -64,7 +64,10 @@ internal class RoomHttpServer(
             val host = session.headers["host"]?.takeIf { it.matches(Regex("[A-Za-z0-9.:-]{1,260}")) }
                 ?: "127.0.0.1:${RoomRuntime.PORT}"
             val hostIp = host.substringBefore(':')
-            val appLink = RoomAddress(hostIp, RoomRuntime.PORT, token).appLink
+            val forwardedHttps = session.headers["x-forwarded-proto"].equals("https", true)
+            val advertisedPort = host.substringAfterLast(':').toIntOrNull()
+                ?: if (forwardedHttps) 443 else RoomRuntime.PORT
+            val appLink = RoomAddress(hostIp, advertisedPort, token, forwardedHttps).appLink
             val html = """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><h2>MovieTogether</h2><p>Join: $safeTitle</p><p><a href="$appLink">Open MovieTogether app</a></p><p>Install the same MovieTogether APK on both phones. The host must be reachable over the network.</p></body></html>"""
             return NanoHTTPD.newFixedLengthResponse(Status.OK, "text/html; charset=utf-8", html)
                 .apply { addHeader("Cache-Control", "no-store") }

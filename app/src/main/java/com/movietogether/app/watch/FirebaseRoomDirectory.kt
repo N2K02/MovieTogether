@@ -91,6 +91,7 @@ object FirebaseRoomDirectory {
                 "host" to address.host,
                 "port" to address.port,
                 "mediaToken" to address.token,
+                "secure" to address.secure,
                 "title" to movieTitle.take(120),
                 "expiresAt" to (System.currentTimeMillis() + ROOM_LIFETIME_MS),
             )
@@ -143,6 +144,7 @@ object FirebaseRoomDirectory {
                                 requireNotNull(snapshot.child("host").getValue(String::class.java)),
                                 requireNotNull(snapshot.child("port").getValue(Long::class.java)).toInt(),
                                 requireNotNull(snapshot.child("mediaToken").getValue(String::class.java)),
+                                snapshot.child("secure").getValue(Boolean::class.java) ?: false,
                             )
                         }
                         result(address)

@@ -2,8 +2,11 @@ package com.movietogether.app.watch
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import javax.net.ssl.SSLHandshakeException
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -25,6 +28,11 @@ object RoomRuntime {
 
     @Volatile private var server: RoomHttpServer? = null
     @Volatile private var guestSocket: WebSocket? = null
+    private val networkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var reconnectJob: Job? = null
+    private var activeRoom: RoomAddress? = null
+    private var socketGeneration = 0L
+    private var retryAttempt = 0
     private val client = OkHttpClient.Builder()
         .connectTimeout(7, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -98,7 +106,11 @@ object RoomRuntime {
 
     /** Called only by a token-authenticated room WebSocket. */
     @Synchronized fun receiveGuestPlaybackControl(playing: Boolean, name: String) {
-        if (host.value.running) applyPlaybackControl(playing, name, null)
+        if (host.value.running) {
+            val current = playback.value
+            applyPlaybackControl(playing, name,
+                PlaybackSyncPolicy.targetPosition(current, SystemClock.elapsedRealtime()))
+        }
     }
 
     private fun applyPlaybackControl(playing: Boolean, name: String, positionMs: Long?) {
@@ -118,7 +130,7 @@ object RoomRuntime {
     }
 
     private fun publishPlayback(snapshot: PlaybackSnapshot) {
-        playback.value = snapshot
+        playback.value = snapshot.copy(observedAtElapsedMs = SystemClock.elapsedRealtime())
         server?.broadcast(playbackWire())
     }
 
@@ -136,57 +148,119 @@ object RoomRuntime {
         messages.value = (messages.value + ChatEntry(sender.take(30), body.take(500), timestamp)).takeLast(100)
     }
 
-    fun joinRoom(address: RoomAddress) {
+    /**
+     * Manual join replaces any previous connection and cancels its pending retries.
+     * Automatic retries retain the same invitation and are cancelled by Leave or Quit.
+     */
+    @Synchronized fun joinRoom(address: RoomAddress) {
+        require(RoomTransportPolicy.mayConnect(address)) { RoomTransportPolicy.TLS_REQUIRED_MESSAGE }
         leaveRoom()
-        guest.value = GuestStatus(error = "Connecting to ${address.host}…")
+        activeRoom = address
+        val generation = ++socketGeneration
+        retryAttempt = 0
+        guest.value = GuestStatus(error = "Connecting to room…")
+        openSocket(address, generation)
+    }
+
+    @Synchronized private fun openSocket(address: RoomAddress, generation: Long) {
+        if (socketGeneration != generation || activeRoom != address) return
+        guest.value = GuestStatus(error = if (retryAttempt == 0) "Connecting to room…"
+            else "Reconnecting to room (attempt $retryAttempt)…")
         val request = Request.Builder().url(address.wsUrl)
             .header("Authorization", "Bearer ${address.token}").build()
         guestSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                if (guestSocket !== webSocket) {
-                    webSocket.close(1000, "Superseded")
-                    return
-                }
-                guest.value = GuestStatus(connected = true)
-            }
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                if (guestSocket !== webSocket) return
-                try {
-                    val event = JSONObject(text)
-                    when (event.optString("type")) {
-                        "playback" -> {
-                            val revision = event.optLong("revision", 0)
-                            if (revision > playback.value.revision) {
-                                playback.value = PlaybackSnapshot(
-                                    event.optLong("positionMs", 0),
-                                    event.optBoolean("playing", false),
-                                    revision,
-                                    event.optString("changedBy").takeIf { it.isNotBlank() },
-                                    event.optString("change").takeIf { it.isNotBlank() },
-                                )
-                            }
-                        }
-                        "chat" -> recordChat(event.optString("name", "Guest"),
-                            event.optString("text"), event.optLong("timeMs", System.currentTimeMillis()))
+                synchronized(this@RoomRuntime) {
+                    if (!isCurrent(webSocket, generation)) {
+                        webSocket.close(1000, "Superseded")
+                        return
                     }
-                } catch (_: Exception) { /* Ignore malformed events. */ }
+                    retryAttempt = 0
+                    reconnectJob?.cancel()
+                    reconnectJob = null
+                    guest.value = GuestStatus(connected = true)
+                }
             }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                synchronized(this@RoomRuntime) {
+                    if (!isCurrent(webSocket, generation)) return
+                    try {
+                        val event = JSONObject(text)
+                        when (event.optString("type")) {
+                            "playback" -> {
+                                val revision = event.optLong("revision", 0)
+                                if (revision > playback.value.revision) {
+                                    playback.value = PlaybackSnapshot(
+                                        event.optLong("positionMs", 0L).coerceAtLeast(0L),
+                                        event.optBoolean("playing", false),
+                                        revision,
+                                        event.optString("changedBy").takeIf { it.isNotBlank() },
+                                        event.optString("change").takeIf { it.isNotBlank() },
+                                        SystemClock.elapsedRealtime(),
+                                    )
+                                }
+                            }
+                            "chat" -> recordChat(event.optString("name", "Guest"),
+                                event.optString("text"),
+                                event.optLong("timeMs", System.currentTimeMillis()))
+                        }
+                    } catch (_: Exception) { /* Ignore malformed events. */ }
+                }
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (guestSocket === webSocket) guest.value = GuestStatus(error = "Host disconnected")
+                val roomFull = code == 1008 && reason.contains("full", ignoreCase = true)
+                connectionLost(webSocket, generation,
+                    if (roomFull) "Room is full" else "Connection lost", terminal = roomFull)
             }
+
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (guestSocket === webSocket) guest.value = GuestStatus(
-                    error = if (response?.code == 401) "Invitation expired or invalid"
-                    else "Host unreachable: check Wi-Fi, IP address and router/firewall.",
-                )
+                val invalid = response?.code == 401 || response?.code == 403
+                val tlsError = t is SSLHandshakeException || t.cause is SSLHandshakeException
+                val error = when {
+                    invalid -> "Invitation expired or invalid"
+                    tlsError -> "Secure connection failed: check the HTTPS certificate"
+                    else -> "Host unreachable: checking connection and retrying"
+                }
+                connectionLost(webSocket, generation, error, terminal = invalid || tlsError)
             }
         })
     }
 
-    fun leaveRoom() {
-        val old = guestSocket
+    private fun isCurrent(webSocket: WebSocket, generation: Long): Boolean =
+        generation == socketGeneration && guestSocket === webSocket && activeRoom != null
+
+    @Synchronized private fun connectionLost(
+        webSocket: WebSocket, generation: Long, reason: String, terminal: Boolean,
+    ) {
+        if (!isCurrent(webSocket, generation)) return
         guestSocket = null
-        old?.close(1000, "Leaving")
+        guest.value = GuestStatus(error = reason)
+        // A room close, explicit leave, revoked link or TLS trust failure must not spin.
+        if (terminal) return
+        val room = activeRoom ?: return
+        val attempt = ++retryAttempt
+        reconnectJob?.cancel()
+        reconnectJob = networkScope.launch {
+            delay(PlaybackSyncPolicy.reconnectDelayMs(attempt))
+            synchronized(this@RoomRuntime) {
+                if (generation == socketGeneration && activeRoom == room && guestSocket == null) {
+                    openSocket(room, generation)
+                }
+            }
+        }
+    }
+
+    @Synchronized fun leaveRoom() {
+        socketGeneration++
+        reconnectJob?.cancel()
+        reconnectJob = null
+        activeRoom = null
+        retryAttempt = 0
+        val previous = guestSocket
+        guestSocket = null
+        previous?.close(1000, "Leaving")
         guest.value = GuestStatus()
         if (!host.value.running) {
             playback.value = PlaybackSnapshot()

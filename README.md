@@ -7,9 +7,9 @@ Android watch-party application: **one APK on every device**. The host picks a l
 This edition keeps **movie streaming inside the host Android APK**. Firebase Realtime Database and anonymous authentication optionally provide room-code discovery; there is still no video relay or external movie storage.
 
 - **Works:** Devices on the same Wi-Fi (unless client isolation is enabled), or connected through a mutually routable private/VPN network.
-- **Sometimes works:** Different networks when the host has a reachable public address and manual port forwarding/firewall configuration.
+- **Sometimes works:** Different networks when the host has a reachable public address and a correctly configured trusted HTTPS/WSS reverse proxy or a shared private VPN.
 - **Does not work automatically:** Carrier-grade NAT, changing private IP addresses, or strict firewalls. Firebase codes can point to a new host IP when updated, but cannot create a network path through NAT.
-- **Security:** HTTP/WS is unencrypted. Use trusted networks and do not expose private watch rooms over the public internet without a secure tunnel.
+- **Security:** Plain HTTP/WS links are limited by the guest app to local/private/VPN addresses. Public links must use a valid HTTPS/WSS certificate and reachable reverse proxy. TLS terminates at the proxy, so also protect its connection to the phone with a VPN or trusted local network. There is still no built-in universal relay or automatic NAT traversal.
 
 ## How to host
 
@@ -18,18 +18,18 @@ This edition keeps **movie streaming inside the host Android APK**. Firebase Rea
 3. In MovieTogether, choose **Create a room** and select a progressive MP4 file (H.264/AAC is recommended). If Firebase is configured, a cloud room code is also registered.
 4. When the host server starts, tap **Share invitation**. Send the Firebase room code link (if configured) or the direct app link.
 5. On a guest phone, open the invitation in MovieTogether or paste the invite link into **Join a room**.
-6. Everyone can tap **Pause all** or **Play all**; all devices follow the host-owned state and show who paused/resumed (display names are self-declared). The host can seek ±10 seconds. Use the floating chat bubble for messages and unread counts.
+6. Everyone can tap **Pause all** or **Play all**; all devices follow the host-owned state and show who paused/resumed (display names are self-declared). The host can seek ±10 seconds. Use the floating chat bubble for messages and unread counts. Guest playback uses drift correction, and dropped WebSockets retry with capped backoff; invalid links and TLS trust failures do not retry automatically.
 7. Guests can tap **Leave room** and later **Rejoin last room** (or **Forget** the saved invitation); **Quit** closes the app. Hosts tap **End room** or the **Stop sharing** notification action to stop serving the selected file.
 
-For a network that is already routable (manual VPN/port forwarding), the host may enter an optional public/VPN address in the room screen. The host listens on TCP port **8787**.
+For a private/VPN network, the host may enter an optional reachable private IP/port in the room screen. For public DNS, use the **HTTPS/WSS reverse proxy** toggle with the actual hostname and public TLS port (443 by default), and update the Firebase invitation. The embedded phone server itself still listens on plain HTTP/WS TCP **8787**. See [Networking and security](docs/networking-and-security.md) for the required setup.
 
 ## Architecture
 
 - Jetpack Compose and shared `dev.n2k02:theme` / `dev.n2k02:updater`.
 - Android foreground `HostService` manages a single locally embedded NanoHTTPD server.
 - The embedded server only exposes the SAF-selected MP4 over authenticated GET/HEAD byte-range requests.
-- The guest uses a Media3 ExoPlayer authenticated HTTP DataSource.
-- Authenticated WebSocket broadcasts host-authoritative playback snapshots, participant pause/resume requests with self-entered names, and text chat.
+- The guest uses a Media3 ExoPlayer authenticated HTTP/HTTPS DataSource, with local monotonic-clock target prediction and periodic drift correction.
+- Authenticated WebSocket (or WSS behind TLS reverse proxy) broadcasts host-authoritative playback snapshots, participant pause/resume requests with self-entered names, and text chat. Unexpected disconnects trigger capped retries that are cancelled on Leave/Quit.
 - Rooms use a 256-bit random invitation token. When hosting ends, the room closes and its token is revoked.
 
 ## Limitations
@@ -40,7 +40,7 @@ For a network that is already routable (manual VPN/port forwarding), the host ma
 - Saved rejoin links contain a room token in app-private preferences; **Forget** clears the saved link, and ending hosting revokes its token.
 - Participant display names are not verified identities. Treat pause/resume attribution as informational, not security evidence.
 - Host must stay online and reachable; MovieTogether does not include a routing/discovery service.
-- Media streaming and signaling are not encrypted under direct HTTP/WS, even though access is token-guarded.
+- Local HTTP/WS media streaming and signaling remain unencrypted even though access is token-guarded. HTTPS/WSS relies on an external trusted TLS endpoint; MovieTogether does not provision certificates or host a relay.
 - Only stream media you have permission to share.
 
 ## Development / experimental builds
@@ -48,6 +48,8 @@ For a network that is already routable (manual VPN/port forwarding), the host ma
 Branch `feature/internet-watch-party` has a checks-only GitHub Actions workflow which runs Android Debug assemble, JVM tests, and lint; it **does not produce a public release**. One final PR to `main` triggers the repository's existing signed experimental APK release workflow after integrated verification.
 
 Full technical plan: [docs/internet-watch-party-plan.md](docs/internet-watch-party-plan.md).
+Network and security deployment: [docs/networking-and-security.md](docs/networking-and-security.md).
+Manual two-device acceptance plan: [docs/watch-party-acceptance.md](docs/watch-party-acceptance.md).
 
 Gradle needs `N2K02_PACKAGES_TOKEN` for private theme and updater GitHub Packages dependencies.
 
