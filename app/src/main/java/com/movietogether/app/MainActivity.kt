@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,17 +69,37 @@ private fun MovieTogetherApp() {
 
     val updaterState by LiveUpdater.controller.status.collectAsState()
     val updateAvailable = updaterState.hasPendingUpdate()
+    val activity = androidx.activity.compose.LocalActivity.current
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { if (page != 0 && settingsPage) dev.n2k02.updater.N2K02UpdateTitle() else Text(if (page == 0) "MovieTogether" else "Settings") },
-                navigationIcon = {
-                    if (page == 1 && settingsPage) {
-                        IconButton(onClick = { settingsPage = false }) {
-                            Icon(Icons.Rounded.ArrowBack, "Back to settings")
-                        }
+                title = {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            when {
+                                page == 0 -> Icons.Rounded.Movie
+                                settingsPage -> Icons.Rounded.Info
+                                else -> Icons.Rounded.Settings
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Text(when {
+                            page == 0 -> "Home"
+                            settingsPage -> "About & updates"
+                            else -> "Settings"
+                        }, maxLines = 1)
                     }
+                },
+                actions = {
+                    dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
+                    Text("MovieTogether", style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 6.dp, end = 12.dp))
                 },
             )
         },
@@ -99,6 +120,16 @@ private fun MovieTogetherApp() {
                         }
                     },
                     label = { Text("Settings") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = {
+                        LiveUpdater.controller.cancel()
+                        activity?.finishAndRemoveTask()
+                    },
+                    icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
+                    label = { Text("Quit") },
+                    alwaysShowLabel = true,
                 )
             }
         },
@@ -134,6 +165,12 @@ private fun MovieTogetherApp() {
                     }
                 }
             } else if (!settingsPage) {
+                Text(
+                    "App information",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 12.dp),
+                )
                 ListItem(
                     headlineContent = { Text("About & updates") },
                     supportingContent = {
