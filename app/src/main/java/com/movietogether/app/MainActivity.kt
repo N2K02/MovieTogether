@@ -174,11 +174,8 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 },
                 actions = {
                     dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
-                    Text(
-                        "MovieTogether",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 6.dp, end = 12.dp),
-                    )
+                    Text("MovieTogether", style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 6.dp, end = 12.dp))
                 },
             )
         },
