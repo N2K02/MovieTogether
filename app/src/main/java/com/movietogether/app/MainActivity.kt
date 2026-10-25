@@ -130,7 +130,9 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(when (page) {
+                    if (page == Screen.UPDATES) {
+                        dev.n2k02.updater.N2K02UpdateTitle()
+                    } else Text(when (page) {
                         Screen.HOME -> "MovieTogether"
                         Screen.HOST -> "Host watch party"
                         Screen.GUEST -> "Watch together"
@@ -159,7 +161,11 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 NavigationBarItem(
                     selected = page in listOf(Screen.SETTINGS, Screen.UPDATES),
                     onClick = { page = Screen.SETTINGS },
-                    icon = { Icon(Icons.Rounded.Settings, null) },
+                    icon = {
+                        dev.n2k02.updater.N2K02UpdateBadgedIcon(updaterState) {
+                            Icon(Icons.Rounded.Settings, "Settings")
+                        }
+                    },
                     label = { Text("Settings") },
                 )
             }
@@ -285,7 +291,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         supportingContent = { Text(if (updaterState.hasPendingUpdate())
                             "Update available" else "Version and update checks") },
                         leadingContent = { Icon(Icons.Rounded.Info, null) },
-                        trailingContent = { if (updaterState.hasPendingUpdate()) UpdateAvailableBadge() },
+                        trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updaterState) },
                         modifier = Modifier.clickable { page = Screen.UPDATES },
                     )
                     ListItem(
@@ -298,25 +304,13 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                     Text("Firebase makes invitations easier; it does not relay videos. Direct HTTP/WS has no TLS—only share movies on trusted networks.")
                 }
                 Screen.UPDATES -> {
-                    ListItem(
-                        headlineContent = { Text("MovieTogether") },
-                        supportingContent = { Text("Version ${LiveUpdater.installedVersionName}") },
-                        leadingContent = { Icon(Icons.Rounded.Settings, null) },
-                    )
                     val experimental by LiveUpdater.experimentalEnabled.collectAsState()
-                    ListItem(
-                        headlineContent = { Text("Experimental updates") },
-                        supportingContent = { Text("Offer signed builds from successful pull requests") },
-                        trailingContent = {
-                            Switch(checked = experimental, onCheckedChange = LiveUpdater::setExperimentalEnabled)
-                        },
-                        modifier = Modifier.clickable { LiveUpdater.setExperimentalEnabled(!experimental) },
-                    )
-                    HorizontalDivider()
                     N2K02UpdateScreen(
                         controller = LiveUpdater.controller,
                         installGuard = LiveUpdater.installGuard,
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        experimentalEnabled = experimental,
+                        onExperimentalEnabledChange = LiveUpdater::setExperimentalEnabled,
                     )
                 }
             }
