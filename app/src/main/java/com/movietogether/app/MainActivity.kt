@@ -69,7 +69,7 @@ private fun MovieTogetherApp() {
 
     val updaterState by LiveUpdater.controller.status.collectAsState()
     val updateAvailable = updaterState.hasPendingUpdate()
-    val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
+    val activity = androidx.activity.compose.LocalActivity.current
 
     Scaffold(
         topBar = {
