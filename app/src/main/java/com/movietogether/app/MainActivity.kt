@@ -153,6 +153,12 @@ private fun MovieTogetherApp() {
                     }
                 }
             } else if (!settingsPage) {
+                Text(
+                    "App information",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 12.dp),
+                )
                 ListItem(
                     headlineContent = { Text("About & updates") },
                     supportingContent = {
