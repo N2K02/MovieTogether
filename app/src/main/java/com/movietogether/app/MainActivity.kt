@@ -1,6 +1,12 @@
 package com.movietogether.app
 
+import android.app.PictureInPictureParams
 import android.content.Intent
+import android.content.res.Configuration
+import android.os.Build
+import android.util.Rational
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -30,13 +36,62 @@ import dev.n2k02.updater.hasPendingUpdate as hasSharedPendingUpdate
 
 class MainActivity : ComponentActivity() {
     private val incomingInvitation = mutableStateOf<String?>(null)
+    private val pipMode = mutableStateOf(false)
+    private var canEnterPip = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LiveUpdater.init(this)
+        RoomChatBubbleNotifications.initialize(this)
         incomingInvitation.value = intent?.dataString
         enableEdgeToEdge()
-        setContent { MovieTogetherTheme { MovieTogetherApp(incomingInvitation.value) } }
+        setContent {
+            MovieTogetherTheme {
+                MovieTogetherApp(incomingInvitation.value, pipMode.value)
+            }
+        }
+    }
+
+    /** Only opt in when a watch room is on-screen and the video is playing. */
+    fun configurePictureInPicture(eligible: Boolean) {
+        if (canEnterPip == eligible) return
+        canEnterPip = eligible
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                params.setAutoEnterEnabled(eligible)
+            }
+            setPictureInPictureParams(params.build())
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Android 12+ uses setAutoEnterEnabled for smooth gesture transitions.
+        if (Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S &&
+            canEnterPip && !isInPictureInPictureMode) {
+            enterPictureInPictureMode(PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9)).build())
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(inPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(inPictureInPictureMode, newConfig)
+        pipMode.value = inPictureInPictureMode
+        RoomChatBubbleNotifications.setAppForeground(!inPictureInPictureMode)
+        if (inPictureInPictureMode) RoomChatBubbleNotifications.showRoomBubble()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        RoomChatBubbleNotifications.setAppForeground(!isInPictureInPictureMode)
+    }
+
+    override fun onStop() {
+        RoomChatBubbleNotifications.setAppForeground(false)
+        if (!isInPictureInPictureMode) RoomChatBubbleNotifications.showRoomBubble()
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -55,7 +110,7 @@ private enum class Screen { HOME, HOST, GUEST, SETTINGS, UPDATES }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MovieTogetherApp(incomingInvitation: String?) {
+private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Boolean) {
     val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf(Screen.HOME) }
     var joinText by rememberSaveable { mutableStateOf("") }
@@ -77,7 +132,15 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
         currentGuestString?.let { runCatching { RoomAddress.parse(it) }.getOrNull() }
     }
     var joinError by remember { mutableStateOf<String?>(null) }
-    var displayName by rememberSaveable { mutableStateOf("Guest") }
+    val profile = remember(context) {
+        context.getSharedPreferences("room_profile", android.content.Context.MODE_PRIVATE)
+    }
+    var displayName by rememberSaveable {
+        mutableStateOf(profile.getString("displayName", "Guest") ?: "Guest")
+    }
+    LaunchedEffect(displayName) {
+        profile.edit().putString("displayName", displayName).apply()
+    }
 
     val host by RoomRuntime.host.collectAsState()
     val guest by RoomRuntime.guest.collectAsState()
@@ -90,9 +153,21 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     val cloudInvitation by FirebaseRoomDirectory.invitation.collectAsState()
     val cloudStatus by FirebaseRoomDirectory.status.collectAsState()
     val activity = androidx.activity.compose.LocalActivity.current
+    val playerState by RoomRuntime.playback.collectAsState()
+    val watchOnScreen = (page == Screen.HOST && host.running && selectedFile != null) ||
+        (page == Screen.GUEST && guest.connected && currentGuest != null)
+    LaunchedEffect(activity, watchOnScreen, playerState.playing) {
+        (activity as? MainActivity)?.configurePictureInPicture(
+            watchOnScreen && playerState.playing
+        )
+    }
+    val chatPermissionRequest = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* Android may still require the user to allow bubbles in system settings. */ }
     val quitCoordinator = remember(context, activity) {
         AppShutdownCoordinator(
             cleanupActions = listOf(
+                { RoomChatBubbleNotifications.dismiss() },
                 { RoomRuntime.leaveRoom() },
                 { FirebaseRoomDirectory.endHosting() },
                 { RoomRuntime.stopServer() },
@@ -121,6 +196,11 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             lastSeenMessageCount = 0
             selectedFileString = null
             RoomRuntime.joinRoom(address)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) {
+                chatPermissionRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
             page = Screen.GUEST
             joinError = null
         }
@@ -154,6 +234,11 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             lastSeenMessageCount = 0
             if (displayName == "Guest") displayName = "Host"
             HostService.start(context, uri, title)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) {
+                chatPermissionRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
             selectedFileString = uri.toString()
             page = Screen.HOST
         }
@@ -170,7 +255,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (!inPictureInPicture) TopAppBar(
                 title = {
                     Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -208,7 +293,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             )
         },
         bottomBar = {
-            NavigationBar {
+            if (!inPictureInPicture) NavigationBar {
                 NavigationBarItem(
                     selected = page in listOf(Screen.HOME, Screen.HOST, Screen.GUEST),
                     onClick = {
@@ -240,7 +325,8 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                if (inPictureInPicture) Modifier.fillMaxSize()
+                else Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 12.dp)
                     .padding(bottom = if (page == Screen.HOST || page == Screen.GUEST) 72.dp else 0.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -307,6 +393,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 }
                 Screen.HOST -> {
                     if (host.running) {
+                        if (!inPictureInPicture) {
                         Text(host.title, style = MaterialTheme.typography.titleLarge)
                         Text("Server running · ${host.viewers} connected viewers")
                         val address = host.address
@@ -411,11 +498,13 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                 Text("No network IP available. Connect to Wi-Fi first.", color = MaterialTheme.colorScheme.error)
                             }
                         }
-                        if (selectedFile != null) {
-                            WatchPlayer(selectedFile!!, true, null, displayName)
                         }
-                        OutlinedButton(onClick = {
+                        if (selectedFile != null) {
+                            WatchPlayer(selectedFile!!, true, null, displayName, inPictureInPicture)
+                        }
+                        if (!inPictureInPicture) OutlinedButton(onClick = {
                             HostService.stop(context)
+                            RoomChatBubbleNotifications.dismiss()
                             showChat = false
                             selectedFileString = null
                             page = Screen.HOME
@@ -432,8 +521,9 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 Screen.GUEST -> {
                     if (currentGuest != null) {
                         if (guest.connected) {
-                            WatchPlayer(Uri.parse(currentGuest!!.mediaUrl), false, currentGuest, displayName)
-                        } else {
+                            WatchPlayer(Uri.parse(currentGuest!!.mediaUrl), false, currentGuest,
+                                displayName, inPictureInPicture)
+                        } else if (!inPictureInPicture) {
                             Text(guest.error ?: "Connecting…")
                             Text(
                                 "MovieTogether retries dropped connections automatically. " +
@@ -444,8 +534,9 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                 Text("Retry now")
                             }
                         }
-                        OutlinedButton(onClick = {
+                        if (!inPictureInPicture) OutlinedButton(onClick = {
                             RoomRuntime.leaveRoom()
+                            RoomChatBubbleNotifications.dismiss()
                             showChat = false
                             lastSeenMessageCount = 0
                             currentGuestString = null
@@ -478,6 +569,23 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
+                    ListItem(
+                        headlineContent = { Text("Chat bubbles") },
+                        supportingContent = {
+                            Text("Show room messages as an Android conversation bubble " +
+                                "when minimized. Notifications and bubbles must be enabled in Android settings.")
+                        },
+                        leadingContent = { Icon(Icons.Rounded.ChatBubble, null) },
+                        modifier = Modifier.clickable {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                                PackageManager.PERMISSION_GRANTED) {
+                                chatPermissionRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                RoomChatBubbleNotifications.openBubbleSettings(context)
+                            }
+                        },
+                    )
                     HorizontalDivider(Modifier.padding(top = 8.dp))
                     ListItem(
                         headlineContent = { Text("About & updates") },
@@ -500,8 +608,8 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 }
             }
             }
-            if ((page == Screen.HOST && host.running) ||
-                (page == Screen.GUEST && guest.connected)) {
+            if (!inPictureInPicture && ((page == Screen.HOST && host.running) ||
+                (page == Screen.GUEST && guest.connected))) {
                 FloatingActionButton(
                     onClick = {
                         lastSeenMessageCount = chatMessages.size
@@ -521,7 +629,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             }
         }
     }
-    if (showChat && ((page == Screen.HOST && host.running) ||
+    if (!inPictureInPicture && showChat && ((page == Screen.HOST && host.running) ||
             (page == Screen.GUEST && guest.connected))) {
         ModalBottomSheet(onDismissRequest = { showChat = false }) {
             ChatPanel(displayName, { displayName = it })
@@ -530,7 +638,7 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
 }
 
 @Composable
-private fun ChatPanel(displayName: String, setDisplayName: (String) -> Unit) {
+internal fun ChatPanel(displayName: String, setDisplayName: (String) -> Unit) {
     var draft by remember { mutableStateOf("") }
     val messages by RoomRuntime.messages.collectAsState()
     val scrollState = rememberScrollState()

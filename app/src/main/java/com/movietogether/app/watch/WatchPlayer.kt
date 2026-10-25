@@ -32,7 +32,8 @@ import kotlin.math.abs
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: String) {
+fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: String,
+    inPictureInPicture: Boolean = false) {
     val context = LocalContext.current
     val snapshot by RoomRuntime.playback.collectAsState()
     val player = remember(uri, isHost, address) {
@@ -115,9 +116,10 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
             }
         },
         update = { it.player = player; it.useController = false },
-        modifier = Modifier.fillMaxWidth().height(240.dp),
+        modifier = if (inPictureInPicture) Modifier.fillMaxSize()
+            else Modifier.fillMaxWidth().height(240.dp),
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (!inPictureInPicture) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (isHost) {
             IconButton(onClick = {
                 val target = (player.currentPosition - 10_000L).coerceAtLeast(0)
@@ -144,7 +146,7 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
             }) { Icon(Icons.Rounded.Forward10, contentDescription = "Forward 10 seconds") }
         }
     }
-    Text(
+    if (!inPictureInPicture) Text(
         when {
             snapshot.changedBy != null && snapshot.playing -> "Resumed by ${snapshot.changedBy}"
             snapshot.changedBy != null && !snapshot.playing -> "Paused by ${snapshot.changedBy}"
@@ -153,7 +155,7 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
         },
         style = MaterialTheme.typography.bodyMedium,
     )
-    if (!isHost) Text(
+    if (!isHost && !inPictureInPicture) Text(
         "Playback follows the shared room controls. Anyone can pause or resume.",
         style = MaterialTheme.typography.bodySmall,
     )

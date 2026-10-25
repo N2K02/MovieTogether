@@ -145,7 +145,9 @@ object RoomRuntime {
     }
 
     fun recordChat(sender: String, body: String, timestamp: Long = System.currentTimeMillis()) {
-        messages.value = (messages.value + ChatEntry(sender.take(30), body.take(500), timestamp)).takeLast(100)
+        val entry = ChatEntry(sender.take(30), body.take(500), timestamp)
+        messages.value = (messages.value + entry).takeLast(100)
+        com.movietogether.app.RoomChatBubbleNotifications.onNewMessage(entry)
     }
 
     /**

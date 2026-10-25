@@ -18,7 +18,9 @@ This edition keeps **movie streaming inside the host Android APK**. Firebase Rea
 3. In MovieTogether, choose **Create a room** and select a progressive MP4 file (H.264/AAC is recommended). If Firebase is configured, a cloud room code is also registered.
 4. When the host server starts, tap **Share invitation**. Send the Firebase room code link (if configured) or the direct app link.
 5. On a guest phone, open the invitation in MovieTogether or paste the invite link into **Join a room**.
-6. Everyone can tap **Pause all** or **Play all**; all devices follow the host-owned state and show who paused/resumed (display names are self-declared). The host can seek ±10 seconds. Use the floating chat bubble for messages and unread counts. Guest playback uses drift correction, and dropped WebSockets retry with capped backoff; invalid links and TLS trust failures do not retry automatically.
+6. Everyone can tap **Pause all** or **Play all**; all devices follow the host-owned state and show who paused/resumed (display names are self-declared). The host can seek ±10 seconds. Use the floating in-app chat button for messages and unread counts. Guest playback uses drift correction, and dropped WebSockets retry with capped backoff; invalid links and TLS trust failures do not retry automatically.
+   When playback is active and you minimize MovieTogether, Android 8.0+ enters **Picture-in-Picture** (Android 12+ auto-enter, Android 8–11 minimize callback). The video continues while the active player remains alive. In PiP, player controls are hidden and the shared room state still drives playback. Pausing before minimizing leaves the app in the background instead of forcing PiP.
+   When minimized, chat appears through a system **conversation bubble notification** on supported Android 11+ devices, with a regular chat notification as a fallback when system bubbles are disabled. Android 13+ requires notification permission. The app never requests system-wide drawing/overlay access.
 7. Guests can tap **Leave room** and later **Rejoin last room** (or **Forget** the saved invitation); **Quit** closes the app. Hosts tap **End room** or the **Stop sharing** notification action to stop serving the selected file.
 
 For a private/VPN network, the host may enter an optional reachable private IP/port in the room screen. For public DNS, use the **HTTPS/WSS reverse proxy** toggle with the actual hostname and public TLS port (443 by default), and update the Firebase invitation. The embedded phone server itself still listens on plain HTTP/WS TCP **8787**. See [Networking and security](docs/networking-and-security.md) for the required setup.
@@ -26,6 +28,7 @@ For a private/VPN network, the host may enter an optional reachable private IP/p
 ## Architecture
 
 - Jetpack Compose and shared `dev.n2k02:theme` / `dev.n2k02:updater`.
+- Android picture-in-picture and Android conversation notification bubbles; a separate embeddable Compose chat activity lets viewers exchange messages while the PiP video continues.
 - Android foreground `HostService` manages a single locally embedded NanoHTTPD server.
 - The embedded server only exposes the SAF-selected MP4 over authenticated GET/HEAD byte-range requests.
 - The guest uses a Media3 ExoPlayer authenticated HTTP/HTTPS DataSource, with local monotonic-clock target prediction and periodic drift correction.
@@ -37,6 +40,7 @@ For a private/VPN network, the host may enter an optional reachable private IP/p
 - No transcoding: guests need compatible codecs; the initial format is MP4/H.264/AAC.
 - Maximum five concurrent viewer/stream connections.
 - No guarantee the host server stays alive indefinitely after Android enforces foreground-service and power-management rules.
+- PiP and notification bubbles depend on device support, app process lifetime, and user-controlled notification/conversation preferences. Room chat cannot be guaranteed when the guest process is killed; the host already has a dedicated foreground service.
 - Saved rejoin links contain a room token in app-private preferences; **Forget** clears the saved link, and ending hosting revokes its token.
 - Participant display names are not verified identities. Treat pause/resume attribution as informational, not security evidence.
 - Host must stay online and reachable; MovieTogether does not include a routing/discovery service.
