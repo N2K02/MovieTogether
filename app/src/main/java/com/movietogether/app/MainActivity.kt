@@ -72,6 +72,19 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     val updaterState by LiveUpdater.controller.status.collectAsState()
     val cloudInvitation by FirebaseRoomDirectory.invitation.collectAsState()
     val cloudStatus by FirebaseRoomDirectory.status.collectAsState()
+    val activity = androidx.activity.compose.LocalActivity.current
+    val quitCoordinator = remember(context, activity) {
+        AppShutdownCoordinator(
+            cleanupActions = listOf(
+                { RoomRuntime.leaveRoom() },
+                { FirebaseRoomDirectory.endHosting() },
+                { RoomRuntime.stopServer() },
+                { HostService.stop(context) },
+                { LiveUpdater.controller.cancel() },
+            ),
+            finishActivity = { activity?.finishAndRemoveTask() },
+        )
+    }
 
     fun connectInvitation(text: String) {
         if (host.running) {
@@ -131,22 +144,41 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
         topBar = {
             TopAppBar(
                 title = {
-                    if (page == Screen.UPDATES) {
-                        dev.n2k02.updater.N2K02UpdateTitle()
-                    } else Text(when (page) {
-                        Screen.HOME -> "MovieTogether"
-                        Screen.HOST -> "Host watch party"
-                        Screen.GUEST -> "Watch together"
-                        Screen.SETTINGS -> "Settings"
-                        Screen.UPDATES -> "About & updates"
-                    })
-                },
-                navigationIcon = {
-                    if (page == Screen.UPDATES) {
-                        IconButton(onClick = { page = Screen.SETTINGS }) {
-                            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
-                        }
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            when (page) {
+                                Screen.HOME -> Icons.Rounded.Movie
+                                Screen.HOST -> Icons.Rounded.Movie
+                                Screen.GUEST -> Icons.Rounded.Groups
+                                Screen.SETTINGS -> Icons.Rounded.Settings
+                                Screen.UPDATES -> Icons.Rounded.Info
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Text(
+                            when (page) {
+                                Screen.HOME -> "Home"
+                                Screen.HOST -> "Host watch party"
+                                Screen.GUEST -> "Watch together"
+                                Screen.SETTINGS -> "Settings"
+                                Screen.UPDATES -> "About & updates"
+                            },
+                            maxLines = 1,
+                        )
                     }
+                },
+                actions = {
+                    dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
+                    Text(
+                        "MovieTogether",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 6.dp, end = 12.dp),
+                    )
                 },
             )
         },
@@ -154,10 +186,12 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             NavigationBar {
                 NavigationBarItem(
                     selected = page in listOf(Screen.HOME, Screen.HOST, Screen.GUEST),
-                    onClick = { page = if (host.running) Screen.HOST
-                        else if (currentGuest != null) Screen.GUEST else Screen.HOME },
+                    onClick = {
+                        page = if (host.running) Screen.HOST
+                            else if (currentGuest != null) Screen.GUEST else Screen.HOME
+                    },
                     icon = { Icon(Icons.Rounded.Movie, null) },
-                    label = { Text("Watch") },
+                    label = { Text("Home") },
                 )
                 NavigationBarItem(
                     selected = page in listOf(Screen.SETTINGS, Screen.UPDATES),
@@ -168,6 +202,13 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         }
                     },
                     label = { Text("Settings") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { quitCoordinator.quit() },
+                    icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
+                    label = { Text("Quit") },
+                    alwaysShowLabel = true,
                 )
             }
         },
@@ -287,6 +328,31 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                     }
                 }
                 Screen.SETTINGS -> {
+                    Text(
+                        "App information",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 8.dp),
+                    )
+                    ListItem(
+                        headlineContent = { Text("Hosting and connectivity") },
+                        supportingContent = {
+                            Text("Port ${RoomRuntime.PORT} · IPv4: ${RoomRuntime.availableIPv4().joinToString().ifBlank { "unavailable" }}")
+                        },
+                        leadingContent = { Icon(Icons.Rounded.Wifi, null) },
+                    )
+                    Text(
+                        "Firebase project: movietogether-45988 · Status: $cloudStatus",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Text(
+                        "Firebase provides invitations only, not video relay. HTTP/WS is not encrypted; " +
+                            "host on trusted networks with direct access to TCP 8787.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    HorizontalDivider(Modifier.padding(top = 8.dp))
                     ListItem(
                         headlineContent = { Text("About & updates") },
                         supportingContent = { Text(if (updaterState.hasSharedPendingUpdate())
@@ -295,14 +361,6 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                         trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updaterState) },
                         modifier = Modifier.clickable { page = Screen.UPDATES },
                     )
-                    ListItem(
-                        headlineContent = { Text("Hosting and connectivity") },
-                        supportingContent = { Text("Port ${RoomRuntime.PORT} · IPv4: ${RoomRuntime.availableIPv4().joinToString().ifBlank { "unavailable" }}") },
-                        leadingContent = { Icon(Icons.Rounded.Wifi, null) },
-                    )
-                    Text("Firebase project: movietogether-45988")
-                    Text("Firebase status: $cloudStatus")
-                    Text("Firebase makes invitations easier; it does not relay videos. Direct HTTP/WS has no TLS—only share movies on trusted networks.")
                 }
                 Screen.UPDATES -> {
                     val experimental by LiveUpdater.experimentalEnabled.collectAsState()

@@ -31,7 +31,7 @@ class HostService : Service() {
             else context.startService(intent)
         }
         fun stop(context: Context) {
-            context.startService(Intent(context, HostService::class.java).setAction(ACTION_STOP))
+            context.stopService(Intent(context, HostService::class.java))
         }
     }
 
