@@ -72,7 +72,7 @@ private fun MovieTogetherApp() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (page == 0) "MovieTogether" else if (settingsPage) "About & updates" else "Settings") },
+                title = { if (page != 0 && settingsPage) dev.n2k02.updater.N2K02UpdateTitle() else Text(if (page == 0) "MovieTogether" else "Settings") },
                 navigationIcon = {
                     if (page == 1 && settingsPage) {
                         IconButton(onClick = { settingsPage = false }) {
@@ -144,32 +144,13 @@ private fun MovieTogetherApp() {
                     modifier = Modifier.clickable { settingsPage = true },
                 )
             } else {
-                ListItem(
-                    headlineContent = { Text("MovieTogether") },
-                    supportingContent = { Text("Version ${LiveUpdater.installedVersionName}") },
-                    leadingContent = { Icon(Icons.Rounded.Settings, null) },
-                )
                 val experimental by LiveUpdater.experimentalEnabled.collectAsState()
-                ListItem(
-                    headlineContent = { Text("Experimental updates") },
-                    supportingContent = {
-                        Text("Offer signed APKs from successful pull request builds. Test builds may have bugs.")
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = experimental,
-                            onCheckedChange = LiveUpdater::setExperimentalEnabled,
-                        )
-                    },
-                    modifier = Modifier.clickable {
-                        LiveUpdater.setExperimentalEnabled(!experimental)
-                    },
-                )
-                HorizontalDivider()
                 N2K02UpdateScreen(
                     controller = LiveUpdater.controller,
                     installGuard = LiveUpdater.installGuard,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    experimentalEnabled = experimental,
+                    onExperimentalEnabledChange = LiveUpdater::setExperimentalEnabled,
                 )
             }
         }
