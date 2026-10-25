@@ -72,13 +72,32 @@ private fun MovieTogetherApp() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { if (page != 0 && settingsPage) dev.n2k02.updater.N2K02UpdateTitle() else Text(if (page == 0) "MovieTogether" else "Settings") },
-                navigationIcon = {
-                    if (page == 1 && settingsPage) {
-                        IconButton(onClick = { settingsPage = false }) {
-                            Icon(Icons.Rounded.ArrowBack, "Back to settings")
-                        }
+                title = {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            when {
+                                page == 0 -> Icons.Rounded.Movie
+                                settingsPage -> Icons.Rounded.Info
+                                else -> Icons.Rounded.Settings
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Text(when {
+                            page == 0 -> "Home"
+                            settingsPage -> "About & updates"
+                            else -> "Settings"
+                        }, maxLines = 1)
                     }
+                },
+                actions = {
+                    dev.n2k02.updater.N2K02AppIcon(Modifier.size(28.dp))
+                    Text("MovieTogether", style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 6.dp, end = 12.dp))
                 },
             )
         },
