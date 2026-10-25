@@ -69,6 +69,7 @@ private fun MovieTogetherApp() {
 
     val updaterState by LiveUpdater.controller.status.collectAsState()
     val updateAvailable = updaterState.hasPendingUpdate()
+    val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
 
     Scaffold(
         topBar = {
@@ -124,8 +125,7 @@ private fun MovieTogetherApp() {
                     selected = false,
                     onClick = {
                         LiveUpdater.controller.cancel()
-                        (androidx.compose.ui.platform.LocalContext.current as? ComponentActivity)
-                            ?.finishAndRemoveTask()
+                        activity?.finishAndRemoveTask()
                     },
                     icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
                     label = { Text("Quit") },
