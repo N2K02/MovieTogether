@@ -68,21 +68,58 @@ object RoomRuntime {
         server = null
         host.value = HostStatus()
         playback.value = PlaybackSnapshot()
+        messages.value = emptyList()
     }
 
     fun onViewerCount(count: Int) {
         host.value = host.value.copy(viewers = count)
     }
 
-    fun hostPlayback(position: Long, playing: Boolean) {
+    /**
+     * Host-only seek controls; all viewers receive the new authoritative position.
+     * Seeking retains the last pause/resume attribution.
+     */
+    @Synchronized fun hostSeekTo(positionMs: Long) {
         if (!host.value.running) return
+        PlaybackRules.seek(playback.value, positionMs)?.let(::publishPlayback)
+    }
+
+    /** Anyone can request play/pause. Guests send a request; host applies and broadcasts it. */
+    @Synchronized fun requestPlayback(playing: Boolean, name: String, hostPositionMs: Long? = null) {
+        if (host.value.running) {
+            applyPlaybackControl(playing, name, hostPositionMs)
+        } else if (guest.value.connected) {
+            guestSocket?.send(JSONObject()
+                .put("type", "playback_control")
+                .put("playing", playing)
+                .put("name", PlaybackRules.displayName(name)).toString())
+        }
+    }
+
+    /** Called only by a token-authenticated room WebSocket. */
+    @Synchronized fun receiveGuestPlaybackControl(playing: Boolean, name: String) {
+        if (host.value.running) applyPlaybackControl(playing, name, null)
+    }
+
+    private fun applyPlaybackControl(playing: Boolean, name: String, positionMs: Long?) {
         val previous = playback.value
-        val snapshot = PlaybackSnapshot(position.coerceAtLeast(0), playing, previous.revision + 1)
+        PlaybackRules.control(previous, playing, name, positionMs ?: previous.positionMs)
+            ?.let(::publishPlayback)
+    }
+
+    /** Periodic host position updates never change play/pause or its attribution. */
+    @Synchronized fun hostPlayback(positionMs: Long) {
+        if (!host.value.running) return
+        val current = playback.value
+        if (!current.playing) return
+        val nextPosition = positionMs.coerceAtLeast(0)
+        if (kotlin.math.abs(nextPosition - current.positionMs) < 300L) return
+        publishPlayback(current.copy(positionMs = nextPosition, revision = current.revision + 1))
+    }
+
+    private fun publishPlayback(snapshot: PlaybackSnapshot) {
         playback.value = snapshot
-        server?.broadcast(JSONObject().put("type", "playback")
-            .put("positionMs", snapshot.positionMs)
-            .put("playing", snapshot.playing)
-            .put("revision", snapshot.revision).toString())
+        server?.broadcast(playbackWire())
     }
 
     fun sendChat(name: String, body: String) {
@@ -106,9 +143,14 @@ object RoomRuntime {
             .header("Authorization", "Bearer ${address.token}").build()
         guestSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (guestSocket !== webSocket) {
+                    webSocket.close(1000, "Superseded")
+                    return
+                }
                 guest.value = GuestStatus(connected = true)
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (guestSocket !== webSocket) return
                 try {
                     val event = JSONObject(text)
                     when (event.optString("type")) {
@@ -119,6 +161,8 @@ object RoomRuntime {
                                     event.optLong("positionMs", 0),
                                     event.optBoolean("playing", false),
                                     revision,
+                                    event.optString("changedBy").takeIf { it.isNotBlank() },
+                                    event.optString("change").takeIf { it.isNotBlank() },
                                 )
                             }
                         }
@@ -155,6 +199,9 @@ object RoomRuntime {
         return JSONObject().put("type", "playback")
             .put("positionMs", snapshot.positionMs)
             .put("playing", snapshot.playing)
-            .put("revision", snapshot.revision).toString()
+            .put("revision", snapshot.revision)
+            .put("changedBy", snapshot.changedBy ?: "")
+            .put("change", snapshot.change ?: "")
+            .toString()
     }
 }

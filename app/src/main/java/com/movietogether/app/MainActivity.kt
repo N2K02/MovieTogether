@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -61,6 +63,14 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
     var selectedFileString by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedFile = selectedFileString?.let(Uri::parse)
     var currentGuestString by rememberSaveable { mutableStateOf<String?>(null) }
+    val roomHistory = remember(context) {
+        context.getSharedPreferences("last_room", android.content.Context.MODE_PRIVATE)
+    }
+    var lastJoinedString by rememberSaveable {
+        mutableStateOf(roomHistory.getString("lastJoinedLink", null))
+    }
+    var showChat by rememberSaveable { mutableStateOf(false) }
+    var lastSeenMessageCount by remember { mutableIntStateOf(0) }
     val currentGuest = remember(currentGuestString) {
         currentGuestString?.let { runCatching { RoomAddress.parse(it) }.getOrNull() }
     }
@@ -69,6 +79,11 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
 
     val host by RoomRuntime.host.collectAsState()
     val guest by RoomRuntime.guest.collectAsState()
+    val chatMessages by RoomRuntime.messages.collectAsState()
+    val unreadChat = (chatMessages.size - lastSeenMessageCount).coerceAtLeast(0)
+    LaunchedEffect(showChat, chatMessages.size) {
+        if (showChat) lastSeenMessageCount = chatMessages.size
+    }
     val updaterState by LiveUpdater.controller.status.collectAsState()
     val cloudInvitation by FirebaseRoomDirectory.invitation.collectAsState()
     val cloudStatus by FirebaseRoomDirectory.status.collectAsState()
@@ -94,6 +109,10 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
         fun connect(address: RoomAddress) {
             RoomRuntime.leaveRoom()
             currentGuestString = address.appLink
+            lastJoinedString = address.appLink
+            roomHistory.edit().putString("lastJoinedLink", address.appLink).apply()
+            showChat = false
+            lastSeenMessageCount = 0
             selectedFileString = null
             RoomRuntime.joinRoom(address)
             page = Screen.GUEST
@@ -125,6 +144,9 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                     }
             }.getOrNull() ?: "Selected movie"
             RoomRuntime.leaveRoom()
+            showChat = false
+            lastSeenMessageCount = 0
+            if (displayName == "Guest") displayName = "Host"
             HostService.start(context, uri, title)
             selectedFileString = uri.toString()
             page = Screen.HOST
@@ -210,16 +232,38 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
             }
         },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(bottom = if (page == Screen.HOST || page == Screen.GUEST) 72.dp else 0.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
             when (page) {
                 Screen.HOME -> {
                     Icon(Icons.Rounded.Groups, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
                     Text("Watch together", style = MaterialTheme.typography.headlineMedium)
                     Text("Host a movie from your phone. Everyone installs MovieTogether. No cloud uploads or accounts.")
+                    OutlinedTextField(
+                        value = displayName,
+                        onValueChange = { displayName = it.take(30) },
+                        label = { Text("Your display name (for playback and chat)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (currentGuest == null && lastJoinedString != null && !host.running) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { connectInvitation(lastJoinedString!!) }) {
+                                Icon(Icons.Rounded.Refresh, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Rejoin last room")
+                            }
+                            TextButton(onClick = {
+                                lastJoinedString = null
+                                roomHistory.edit().remove("lastJoinedLink").apply()
+                            }) { Text("Forget") }
+                        }
+                    }
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("Create a room", style = MaterialTheme.typography.titleLarge)
@@ -292,10 +336,12 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                                 Text("No network IP available. Connect to Wi-Fi first.", color = MaterialTheme.colorScheme.error)
                             }
                         }
-                        if (selectedFile != null) WatchPlayer(selectedFile!!, true, null)
-                        ChatPanel(displayName, { displayName = it })
+                        if (selectedFile != null) {
+                            WatchPlayer(selectedFile!!, true, null, displayName)
+                        }
                         OutlinedButton(onClick = {
                             HostService.stop(context)
+                            showChat = false
                             selectedFileString = null
                             page = Screen.HOME
                         }) {
@@ -311,14 +357,17 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                 Screen.GUEST -> {
                     if (currentGuest != null) {
                         if (guest.connected) {
-                            WatchPlayer(Uri.parse(currentGuest!!.mediaUrl), false, currentGuest)
-                            ChatPanel(displayName, { displayName = it })
+                            WatchPlayer(Uri.parse(currentGuest!!.mediaUrl), false, currentGuest, displayName)
                         } else {
                             Text(guest.error ?: "Connecting…")
-                            Button(onClick = { RoomRuntime.joinRoom(currentGuest!!) }) { Text("Retry connection") }
+                            Button(onClick = { RoomRuntime.joinRoom(currentGuest!!) }) {
+                                Text("Rejoin room")
+                            }
                         }
                         OutlinedButton(onClick = {
                             RoomRuntime.leaveRoom()
+                            showChat = false
+                            lastSeenMessageCount = 0
                             currentGuestString = null
                             page = Screen.HOME
                         }) { Text("Leave room") }
@@ -370,6 +419,32 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
                     )
                 }
             }
+            }
+            if ((page == Screen.HOST && host.running) ||
+                (page == Screen.GUEST && guest.connected)) {
+                FloatingActionButton(
+                    onClick = {
+                        lastSeenMessageCount = chatMessages.size
+                        showChat = true
+                    },
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp),
+                ) {
+                    BadgedBox(badge = {
+                        if (unreadChat > 0) Badge {
+                            Text(unreadChat.coerceAtMost(99).toString())
+                        }
+                    }) {
+                        Icon(Icons.Rounded.Chat, contentDescription = "Open room chat")
+                    }
+                }
+            }
+        }
+    }
+    if (showChat && ((page == Screen.HOST && host.running) ||
+            (page == Screen.GUEST && guest.connected))) {
+        ModalBottomSheet(onDismissRequest = { showChat = false }) {
+            ChatPanel(displayName, { displayName = it })
         }
     }
 }
@@ -378,27 +453,53 @@ private fun MovieTogetherApp(incomingInvitation: String?) {
 private fun ChatPanel(displayName: String, setDisplayName: (String) -> Unit) {
     var draft by remember { mutableStateOf("") }
     val messages by RoomRuntime.messages.collectAsState()
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Room chat", style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(
-                value = displayName, onValueChange = { setDisplayName(it.take(30)) },
-                label = { Text("Your name") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+    val scrollState = rememberScrollState()
+    LaunchedEffect(messages.size) { scrollState.animateScrollTo(scrollState.maxValue) }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Room chat", style = MaterialTheme.typography.titleLarge)
+        OutlinedTextField(
+            value = displayName, onValueChange = { setDisplayName(it.take(30)) },
+            label = { Text("Your display name") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Column(
+            Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             if (messages.isEmpty()) Text("No messages yet")
-            messages.takeLast(25).forEach { message ->
-                Text("${message.sender}: ${message.text}", style = MaterialTheme.typography.bodyMedium)
+            messages.takeLast(50).forEach { message ->
+                val isMine = message.sender == PlaybackRules.displayName(displayName)
+                Surface(
+                    modifier = Modifier.align(if (isMine) Alignment.End else Alignment.Start)
+                        .fillMaxWidth(0.88f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isMine) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(message.sender, style = MaterialTheme.typography.labelSmall)
+                        Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
-            OutlinedTextField(
-                value = draft, onValueChange = { draft = it.take(500) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Message") }, maxLines = 3,
-            )
-            Button(onClick = {
+        }
+        OutlinedTextField(
+            value = draft, onValueChange = { draft = it.take(500) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Message") }, maxLines = 3,
+        )
+        Button(
+            onClick = {
                 RoomRuntime.sendChat(displayName, draft)
                 draft = ""
-            }, enabled = draft.isNotBlank()) { Text("Send message") }
-        }
+            },
+            enabled = draft.isNotBlank(),
+            modifier = Modifier.align(Alignment.End),
+        ) { Text("Send message") }
+        Spacer(Modifier.height(8.dp))
     }
 }

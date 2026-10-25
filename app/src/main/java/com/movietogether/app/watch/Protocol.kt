@@ -51,7 +51,32 @@ data class PlaybackSnapshot(
     val positionMs: Long = 0,
     val playing: Boolean = false,
     val revision: Long = 0,
+    val changedBy: String? = null,
+    val change: String? = null,
 )
+
+/** Deterministic, host-owned playback changes; names are display labels, not authenticated identities. */
+object PlaybackRules {
+    fun displayName(name: String): String = name.trim().take(30).ifBlank { "Guest" }
+
+    fun control(current: PlaybackSnapshot, playing: Boolean, actor: String, positionMs: Long): PlaybackSnapshot? {
+        if (current.playing == playing) return null
+        return current.copy(
+            positionMs = positionMs.coerceAtLeast(0),
+            playing = playing,
+            revision = current.revision + 1,
+            changedBy = displayName(actor),
+            change = if (playing) "resumed" else "paused",
+        )
+    }
+
+    fun seek(current: PlaybackSnapshot, positionMs: Long): PlaybackSnapshot? {
+        val newPosition = positionMs.coerceAtLeast(0)
+        if (current.positionMs == newPosition) return null
+        // A seek should not overwrite who last paused/resumed the room.
+        return current.copy(positionMs = newPosition, revision = current.revision + 1)
+    }
+}
 
 data class ChatEntry(
     val sender: String,

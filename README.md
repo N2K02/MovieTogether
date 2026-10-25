@@ -1,6 +1,6 @@
 # MovieTogether
 
-Android watch-party application: **one APK on every device**. The host picks a local movie and serves it directly from their phone. Guests can join through a shared direct-network invitation, stream the movie, follow host-controlled play/pause/seek, and chat in real time.
+Android watch-party application: **one APK on every device**. The host picks a local movie and serves it directly from their phone. Guests can join through a shared direct-network invitation, stream the movie, share play/pause controls with named attribution, follow host-only seeking, and exchange messages in a collapsible in-app chat bubble.
 
 ## Internet limitation — read this first
 
@@ -18,8 +18,8 @@ This edition keeps **movie streaming inside the host Android APK**. Firebase Rea
 3. In MovieTogether, choose **Create a room** and select a progressive MP4 file (H.264/AAC is recommended). If Firebase is configured, a cloud room code is also registered.
 4. When the host server starts, tap **Share invitation**. Send the Firebase room code link (if configured) or the direct app link.
 5. On a guest phone, open the invitation in MovieTogether or paste the invite link into **Join a room**.
-6. The host controls video playback; guests can watch and exchange text messages.
-7. Tap **End room** or the **Stop sharing** notification action to stop serving the selected file.
+6. Everyone can tap **Pause all** or **Play all**; all devices follow the host-owned state and show who paused/resumed (display names are self-declared). The host can seek ±10 seconds. Use the floating chat bubble for messages and unread counts.
+7. Guests can tap **Leave room** and later **Rejoin last room** (or **Forget** the saved invitation); **Quit** closes the app. Hosts tap **End room** or the **Stop sharing** notification action to stop serving the selected file.
 
 For a network that is already routable (manual VPN/port forwarding), the host may enter an optional public/VPN address in the room screen. The host listens on TCP port **8787**.
 
@@ -29,7 +29,7 @@ For a network that is already routable (manual VPN/port forwarding), the host ma
 - Android foreground `HostService` manages a single locally embedded NanoHTTPD server.
 - The embedded server only exposes the SAF-selected MP4 over authenticated GET/HEAD byte-range requests.
 - The guest uses a Media3 ExoPlayer authenticated HTTP DataSource.
-- Authenticated WebSocket broadcasts playback snapshots and text chat.
+- Authenticated WebSocket broadcasts host-authoritative playback snapshots, participant pause/resume requests with self-entered names, and text chat.
 - Rooms use a 256-bit random invitation token. When hosting ends, the room closes and its token is revoked.
 
 ## Limitations
@@ -37,6 +37,8 @@ For a network that is already routable (manual VPN/port forwarding), the host ma
 - No transcoding: guests need compatible codecs; the initial format is MP4/H.264/AAC.
 - Maximum five concurrent viewer/stream connections.
 - No guarantee the host server stays alive indefinitely after Android enforces foreground-service and power-management rules.
+- Saved rejoin links contain a room token in app-private preferences; **Forget** clears the saved link, and ending hosting revokes its token.
+- Participant display names are not verified identities. Treat pause/resume attribution as informational, not security evidence.
 - Host must stay online and reachable; MovieTogether does not include a routing/discovery service.
 - Media streaming and signaling are not encrypted under direct HTTP/WS, even though access is token-guarded.
 - Only stream media you have permission to share.

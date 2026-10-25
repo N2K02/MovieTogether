@@ -165,7 +165,16 @@ internal class RoomHttpServer(
             val text = runCatching { message.textPayload }.getOrNull() ?: return
             if (text.length > 2048) return
             val event = runCatching { JSONObject(text) }.getOrNull() ?: return
-            if (event.optString("type") == "chat") receiveGuestChat(event)
+            when (event.optString("type")) {
+                "chat" -> receiveGuestChat(event)
+                "playback_control" -> if (event.has("playing") &&
+                    event.opt("playing") is Boolean) {
+                    RoomRuntime.receiveGuestPlaybackControl(
+                        event.optBoolean("playing"),
+                        event.optString("name", "Guest"),
+                    )
+                }
+            }
         }
 
         override fun onPong(pong: WebSocketFrame) {}
