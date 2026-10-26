@@ -1,7 +1,6 @@
 package com.movietogether.app
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
