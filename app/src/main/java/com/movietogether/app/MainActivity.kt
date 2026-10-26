@@ -138,8 +138,12 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
     var displayName by rememberSaveable {
         mutableStateOf(RoomProfile.getOrCreate(context))
     }
-    LaunchedEffect(displayName) {
-        profile.edit().putString("displayName", displayName).apply()
+    DisposableEffect(profile) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "displayName") displayName = RoomProfile.getOrCreate(context)
+        }
+        profile.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { profile.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
     val host by RoomRuntime.host.collectAsState()
@@ -342,7 +346,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                     )
                     OutlinedTextField(
                         value = displayName,
-                        onValueChange = { displayName = it.take(30) },
+                        onValueChange = { displayName = RoomProfile.setName(context, it) },
                         label = { Text("Your display name (for playback and chat)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -631,7 +635,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
     if (!inPictureInPicture && showChat && ((page == Screen.HOST && host.running) ||
             (page == Screen.GUEST && guest.connected))) {
         ModalBottomSheet(onDismissRequest = { showChat = false }) {
-            ChatPanel(displayName, { displayName = it })
+            ChatPanel(displayName, { displayName = RoomProfile.setName(context, it) })
         }
     }
 }
