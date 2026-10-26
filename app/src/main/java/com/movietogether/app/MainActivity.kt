@@ -136,7 +136,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
         context.getSharedPreferences("room_profile", android.content.Context.MODE_PRIVATE)
     }
     var displayName by rememberSaveable {
-        mutableStateOf(profile.getString("displayName", "Guest") ?: "Guest")
+        mutableStateOf(RoomProfile.getOrCreate(context))
     }
     LaunchedEffect(displayName) {
         profile.edit().putString("displayName", displayName).apply()
@@ -232,7 +232,6 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
             RoomRuntime.leaveRoom()
             showChat = false
             lastSeenMessageCount = 0
-            if (displayName == "Guest") displayName = "Host"
             HostService.start(context, uri, title)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
