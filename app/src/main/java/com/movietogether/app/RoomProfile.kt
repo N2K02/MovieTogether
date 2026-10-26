@@ -15,6 +15,13 @@ internal object RoomProfile {
         adjectives[nextInt(adjectives.size)] + animals[nextInt(animals.size)] +
             (10 + nextInt(90)).toString()
 
+    fun setName(context: Context, name: String): String {
+        val normalized = name.trim().take(30)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (normalized.isNotEmpty()) prefs.edit().putString(KEY, normalized).apply()
+        return getOrCreate(context)
+    }
+
     fun getOrCreate(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         synchronized(this) {
