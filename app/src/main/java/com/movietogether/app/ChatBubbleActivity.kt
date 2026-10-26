@@ -24,7 +24,7 @@ class ChatBubbleActivity : ComponentActivity() {
                     getSharedPreferences("room_profile", MODE_PRIVATE)
                 }
                 var displayName by rememberSaveable {
-                    mutableStateOf(profile.getString("displayName", "Guest") ?: "Guest")
+                    mutableStateOf(RoomProfile.getOrCreate(this@ChatBubbleActivity))
                 }
                 val hosting by RoomRuntime.host.collectAsState()
                 val viewing by RoomRuntime.guest.collectAsState()
