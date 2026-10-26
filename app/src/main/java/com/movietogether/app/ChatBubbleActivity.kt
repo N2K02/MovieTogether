@@ -28,8 +28,12 @@ class ChatBubbleActivity : ComponentActivity() {
                 }
                 val hosting by RoomRuntime.host.collectAsState()
                 val viewing by RoomRuntime.guest.collectAsState()
-                LaunchedEffect(displayName) {
-                    profile.edit().putString("displayName", displayName).apply()
+                DisposableEffect(profile) {
+                    val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                        if (key == "displayName") displayName = RoomProfile.getOrCreate(this@ChatBubbleActivity)
+                    }
+                    profile.registerOnSharedPreferenceChangeListener(listener)
+                    onDispose { profile.unregisterOnSharedPreferenceChangeListener(listener) }
                 }
                 Scaffold(
                     topBar = {
@@ -45,7 +49,7 @@ class ChatBubbleActivity : ComponentActivity() {
                 ) { inner ->
                     Column(Modifier.fillMaxSize().padding(inner)) {
                         if (hosting.running || viewing.connected) {
-                            ChatPanel(displayName, { displayName = it })
+                            ChatPanel(displayName, { displayName = RoomProfile.setName(this@ChatBubbleActivity, it) })
                         } else {
                             Text(
                                 "No room connected. Rejoin through MovieTogether to chat.",
