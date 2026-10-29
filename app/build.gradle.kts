@@ -22,7 +22,7 @@ android {
 
     buildFeatures { compose = true }
     buildTypes {
-        getByName("debug") { applicationIdSuffix = ".experimental"; versionNameSuffix = "-debug" }
+        getByName("debug") { versionNameSuffix = "-debug" }
         getByName("release") {
             isDebuggable = false
             isMinifyEnabled = true
