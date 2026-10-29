@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LiveUpdater.init(this)
+        AppLog.init(applicationContext)
         RoomChatBubbleNotifications.initialize(this)
         incomingInvitation.value = intent?.dataString
         enableEdgeToEdge()
@@ -106,7 +107,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { HOME, HOST, GUEST, SETTINGS, UPDATES }
+private enum class Screen { HOME, HOST, GUEST, SETTINGS, LOGS, UPDATES }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,10 +137,14 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
         context.getSharedPreferences("room_profile", android.content.Context.MODE_PRIVATE)
     }
     var displayName by rememberSaveable {
-        mutableStateOf(profile.getString("displayName", "Guest") ?: "Guest")
+        mutableStateOf(RoomProfile.getOrCreate(context))
     }
-    LaunchedEffect(displayName) {
-        profile.edit().putString("displayName", displayName).apply()
+    DisposableEffect(profile) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "displayName") displayName = RoomProfile.getOrCreate(context)
+        }
+        profile.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { profile.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
     val host by RoomRuntime.host.collectAsState()
@@ -232,7 +237,6 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
             RoomRuntime.leaveRoom()
             showChat = false
             lastSeenMessageCount = 0
-            if (displayName == "Guest") displayName = "Host"
             HostService.start(context, uri, title)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -251,7 +255,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
             connectInvitation(incomingInvitation)
         }
     }
-    BackHandler(enabled = page == Screen.UPDATES) { page = Screen.SETTINGS }
+    BackHandler(enabled = page == Screen.UPDATES || page == Screen.LOGS) { page = Screen.SETTINGS }
 
     Scaffold(
         topBar = {
@@ -267,6 +271,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                                 Screen.HOST -> Icons.Rounded.Movie
                                 Screen.GUEST -> Icons.Rounded.Groups
                                 Screen.SETTINGS -> Icons.Rounded.Settings
+                                Screen.LOGS -> Icons.Rounded.Article
                                 Screen.UPDATES -> Icons.Rounded.Info
                             },
                             contentDescription = null,
@@ -279,6 +284,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                                 Screen.HOST -> "Host watch party"
                                 Screen.GUEST -> "Watch together"
                                 Screen.SETTINGS -> "Settings"
+                                Screen.LOGS -> "Logs"
                                 Screen.UPDATES -> "About & updates"
                             },
                             maxLines = 1,
@@ -304,7 +310,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                     label = { Text("Home") },
                 )
                 NavigationBarItem(
-                    selected = page in listOf(Screen.SETTINGS, Screen.UPDATES),
+                    selected = page in listOf(Screen.SETTINGS, Screen.LOGS, Screen.UPDATES),
                     onClick = { page = Screen.SETTINGS },
                     icon = {
                         dev.n2k02.updater.N2K02UpdateBadgedIcon(updaterState) {
@@ -324,6 +330,11 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
+            if (page == Screen.LOGS) {
+                MovieTogetherLogsPage(
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
             Column(
                 if (inPictureInPicture) Modifier.fillMaxSize()
                 else Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -343,7 +354,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                     )
                     OutlinedTextField(
                         value = displayName,
-                        onValueChange = { displayName = it.take(30) },
+                        onValueChange = { displayName = RoomProfile.setName(context, it) },
                         label = { Text("Your display name (for playback and chat)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -588,6 +599,12 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                     )
                     HorizontalDivider(Modifier.padding(top = 8.dp))
                     ListItem(
+                        headlineContent = { Text("Logs") },
+                        supportingContent = { Text("Private diagnostic and crash history") },
+                        leadingContent = { Icon(Icons.Rounded.Article, null) },
+                        modifier = Modifier.clickable { page = Screen.LOGS },
+                    )
+                    ListItem(
                         headlineContent = { Text("About & updates") },
                         supportingContent = { Text(if (updaterState.hasSharedPendingUpdate())
                             "Update available" else "Version and update checks") },
@@ -596,6 +613,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                         modifier = Modifier.clickable { page = Screen.UPDATES },
                     )
                 }
+                Screen.LOGS -> Unit // Rendered separately to avoid an outer scroll container.
                 Screen.UPDATES -> {
                     val experimental by LiveUpdater.experimentalEnabled.collectAsState()
                     N2K02UpdateScreen(
@@ -608,6 +626,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                 }
             }
             }
+            } // End normal page layout; Logs owns its own responsive content layout.
             if (!inPictureInPicture && ((page == Screen.HOST && host.running) ||
                 (page == Screen.GUEST && guest.connected))) {
                 FloatingActionButton(
@@ -632,7 +651,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
     if (!inPictureInPicture && showChat && ((page == Screen.HOST && host.running) ||
             (page == Screen.GUEST && guest.connected))) {
         ModalBottomSheet(onDismissRequest = { showChat = false }) {
-            ChatPanel(displayName, { displayName = it })
+            ChatPanel(displayName, { displayName = RoomProfile.setName(context, it) })
         }
     }
 }
