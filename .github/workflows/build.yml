@@ -126,7 +126,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             VERSION_SUFFIX="-experimental.$GITHUB_RUN_NUMBER"
           fi
-          gradle --no-daemon assemble$BUILD_VARIANT \
+          gradle --no-daemon testDebugUnitTest assemble$BUILD_VARIANT \
             -PappVersion="$VERSION" \
             -PappVersionCode="$VERSION_CODE" \
             -PappVersionSuffix="$VERSION_SUFFIX"
