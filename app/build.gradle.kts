@@ -15,12 +15,13 @@ android {
     defaultConfig {
         applicationId = "com.movietogether.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersion + appVersionSuffix
     }
 
     buildFeatures { compose = true }
+    buildTypes { getByName("debug") { applicationIdSuffix = ".experimental"; versionNameSuffix = "-debug" } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
