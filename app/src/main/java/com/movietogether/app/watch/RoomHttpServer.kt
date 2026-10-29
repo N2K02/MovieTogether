@@ -174,7 +174,7 @@ internal class RoomHttpServer(
             if (text.length > 2048) return
             val event = runCatching { JSONObject(text) }.getOrNull() ?: return
             when (event.optString("type")) {
-                "chat" -> receiveGuestChat(event)
+                "chat" -> receiveGuestChat(event, identity.claim(event.optString("name", "Guest")))
                 "playback_control" -> if (event.has("playing") &&
                     event.opt("playing") is Boolean) {
                     RoomRuntime.receiveGuestPlaybackControl(
@@ -193,10 +193,13 @@ internal class RoomHttpServer(
         }
     }
 
-    fun receiveHostChat(event: JSONObject) = receiveGuestChat(event)
+    // Host messages use the host's chosen name; guest names are bound to their
+    // authenticated socket and cannot be changed independently of playback.
+    fun receiveHostChat(event: JSONObject) = receiveGuestChat(event, null)
 
-    private fun receiveGuestChat(event: JSONObject) {
-        val name = event.optString("name", "Guest").trim().take(30).ifBlank { "Guest" }
+    private fun receiveGuestChat(event: JSONObject, verifiedGuestName: String?) {
+        val name = verifiedGuestName ?:
+            event.optString("name", "Guest").trim().take(30).ifBlank { "Guest" }
         val text = event.optString("text").trim().take(500)
         if (text.isEmpty()) return
         val timestamp = System.currentTimeMillis()
