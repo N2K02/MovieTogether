@@ -18,6 +18,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicInteger
 
 /** HTTP Range video server + authenticated WebSocket for a single selected SAF movie. */
 internal class RoomHttpServer(
@@ -27,6 +28,7 @@ internal class RoomHttpServer(
     private val title: String,
 ) : NanoWSD(RoomRuntime.PORT) {
     private val viewers = CopyOnWriteArrayList<RoomSocket>()
+    private val nextGuestId = AtomicInteger()
     private val rangeSlots = Semaphore(5)
     private val size: Long = determineSize()
     private val mime = "video/mp4"
@@ -154,6 +156,9 @@ internal class RoomHttpServer(
     override fun openWebSocket(handshake: IHTTPSession): WebSocket = RoomSocket(handshake)
 
     inner class RoomSocket(handshake: IHTTPSession) : WebSocket(handshake) {
+        // The server owns attribution; wire messages cannot change another guest's identity.
+        private val identity = RoomParticipantIdentity(nextGuestId.incrementAndGet())
+
         override fun onOpen() {
             if (viewers.size >= 5) {
                 close(WebSocketFrame.CloseCode.PolicyViolation, "Room full", false)
@@ -174,7 +179,7 @@ internal class RoomHttpServer(
                     event.opt("playing") is Boolean) {
                     RoomRuntime.receiveGuestPlaybackControl(
                         event.optBoolean("playing"),
-                        event.optString("name", "Guest"),
+                        identity.claim(event.optString("name", "Guest")),
                     )
                 }
             }
