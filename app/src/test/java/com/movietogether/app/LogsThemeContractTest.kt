@@ -35,12 +35,12 @@ class LogsThemeContractTest {
         assertTrue(main.contains("Box(Modifier.fillMaxSize().padding(padding))"))
         assertTrue(main.contains("if (page == Screen.LOGS)"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("maxHeight < 430.dp"))
-        assertTrue(logs.contains("Modifier.verticalScroll(rememberScrollState())"))
-        assertTrue(logs.contains("Modifier.weight(1f)"))
+        assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Modifier.verticalScroll(rememberScrollState())"))
+        assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Modifier.weight(1f)"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("trailingContent = {"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Switch(checked = enabled"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("AppLog.clear()"))
-        assertTrue(logs.contains("onClick = onBack"))
+        assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("onClick = onBack"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("MaterialTheme.colorScheme.surfaceContainer"))
     }
 
