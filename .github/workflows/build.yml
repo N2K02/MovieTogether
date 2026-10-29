@@ -96,47 +96,20 @@ jobs:
             echo "Download the signed APK below and install it on your phone."
           } > release-notes.md
 
-      - name: Configure Firebase for APK if available
-        env:
-          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.MOVIETOGETHER_GOOGLE_SERVICES_JSON_BASE64 }}
-        shell: bash
-        run: |
-          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
-            python3 - <<'PY'
-          import json
-          with open('app/google-services.json', encoding='utf-8') as f:
-              data = json.load(f)
-          assert data['project_info']['project_id'] == 'movietogether-45988'
-          assert any(c['client_info']['android_client_info']['package_name'] == 'com.movietogether.app'
-                     for c in data.get('client', []))
-          PY
-          fi
-
-      - name: Provide experimental Firebase client configuration
-        if: github.event_name == 'pull_request'
+      - name: Verify registered Firebase Android clients
         shell: bash
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
-          file = Path('app/google-services.json')
-          if not file.exists():
-              raise SystemExit('Firebase google-services.json is missing')
-          data = json.loads(file.read_text())
-          target = 'com.movietogether.app.experimental'
-          clients = data.get('client', [])
-          if not any(c.get('client_info', {}).get('android_client_info', {}).get('package_name') == target for c in clients):
-              import copy
-              original = next((c for c in clients if c.get('client_info', {}).get('android_client_info', {}).get('package_name') == 'com.movietogether.app'), None)
-              if original is None:
-                  raise SystemExit('Stable Firebase configuration is missing')
-              derived = copy.deepcopy(original)
-              derived['client_info']['android_client_info']['package_name'] = target
-              # Derived data is sufficient for Gradle configuration; separately register the
-              # experimental Android app in Firebase for production-authenticated services.
-              clients.append(derived)
-              file.write_text(json.dumps(data))
+          data = json.loads(Path('app/google-services.json').read_text())
+          assert data['project_info']['project_id'] == 'movietogether-45988'
+          clients = {c['client_info']['android_client_info']['package_name']:
+                     c['client_info']['mobilesdk_app_id'] for c in data['client']}
+          assert 'com.movietogether.app' in clients
+          assert clients.get('com.movietogether.app.experimental') == '1:1073360589291:android:30b3d8592585c2bf7fc9ae'
+          assert clients['com.movietogether.app'] != clients['com.movietogether.app.experimental']
+          print('Stable and experimental Firebase registrations validated')
           PY
 
       - name: Verify unit tests and Android lint
