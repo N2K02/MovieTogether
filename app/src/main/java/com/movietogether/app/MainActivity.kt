@@ -271,7 +271,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                                 Screen.HOST -> Icons.Rounded.Movie
                                 Screen.GUEST -> Icons.Rounded.Groups
                                 Screen.SETTINGS -> Icons.Rounded.Settings
-                                Screen.LOGS -> Icons.Rounded.BugReport
+                                Screen.LOGS -> Icons.Rounded.Article
                                 Screen.UPDATES -> Icons.Rounded.Info
                             },
                             contentDescription = null,
@@ -601,7 +601,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                     ListItem(
                         headlineContent = { Text("Logs") },
                         supportingContent = { Text("Private diagnostic and crash history") },
-                        leadingContent = { Icon(Icons.Rounded.BugReport, null) },
+                        leadingContent = { Icon(Icons.Rounded.Article, null) },
                         modifier = Modifier.clickable { page = Screen.LOGS },
                     )
                     ListItem(
