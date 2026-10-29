@@ -15,7 +15,7 @@ class LogsThemeContractTest {
         val logs = source("app/src/main/java/com/movietogether/app/LogsActivity.kt")
         val manifest = source("app/src/main/AndroidManifest.xml")
         assertTrue(main.contains("MovieTogetherTheme {"))
-        assertTrue(main.contains("Screen.LOGS -> Icons.Rounded.BugReport"))
+        assertTrue(main.contains("Screen.LOGS -> Icons.Rounded.Article"))
         assertTrue(main.contains("Screen.LOGS -> \"Logs\""))
         assertTrue(main.contains("page = Screen.LOGS"))
         assertTrue(main.contains("if (page == Screen.LOGS)"))
@@ -49,5 +49,6 @@ class LogsThemeContractTest {
         assertTrue(main.contains("BackHandler(enabled = page == Screen.UPDATES || page == Screen.LOGS)"))
         assertTrue(main.contains("selected = page in listOf(Screen.SETTINGS, Screen.LOGS, Screen.UPDATES)"))
         assertTrue(main.contains("label = { Text(\"Quit\") }"))
+        assertTrue(main.contains("leadingContent = { Icon(Icons.Rounded.Article, null) }"))
     }
 }
