@@ -107,9 +107,9 @@ jobs:
           clients = {c['client_info']['android_client_info']['package_name']:
                      c['client_info']['mobilesdk_app_id'] for c in data['client']}
           assert 'com.movietogether.app' in clients
-          assert clients.get('com.movietogether.app.experimental') == '1:1073360589291:android:30b3d8592585c2bf7fc9ae'
-          assert clients['com.movietogether.app'] != clients['com.movietogether.app.experimental']
-          print('Stable and experimental Firebase registrations validated')
+          # Both build variants use the same Android package ID and Firebase app registration.
+          # The previously registered .experimental client may remain in the project but is not used.
+          print('Firebase configuration validated for shared stable/experimental package ID')
           PY
 
       - name: Verify unit tests and Android lint
