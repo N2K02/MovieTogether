@@ -20,7 +20,7 @@ class LogsThemeContractTest {
         assertTrue(main.contains("page = Screen.LOGS"))
         assertTrue(main.contains("if (page == Screen.LOGS)"))
         assertTrue(main.contains("MovieTogetherLogsPage("))
-        assertTrue(main.contains("onBack = { page = Screen.SETTINGS }"))
+        assertFalse(logs.contains("onBack: () -> Unit"))
         assertTrue(main.contains("AppLog.init(applicationContext)"))
         assertFalse(main.contains("LogsActivity::class.java"))
         assertFalse(logs.contains("class LogsActivity"))
@@ -37,10 +37,10 @@ class LogsThemeContractTest {
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("maxHeight < 430.dp"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Modifier.verticalScroll(rememberScrollState())"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Modifier.weight(1f)"))
-        assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("trailingContent = {"))
+        assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Icons.Filled.ContentCopy"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Switch(checked = enabled"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("AppLog.clear()"))
-        assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("onClick = onBack"))
+        assertFalse(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("Text(\"Back\")"))
         assertTrue(source("app/src/main/java/com/movietogether/app/UnifiedLogsPage.kt").contains("MaterialTheme.colorScheme.surfaceContainer"))
     }
 
