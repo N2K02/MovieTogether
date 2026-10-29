@@ -7,5 +7,5 @@ import androidx.compose.ui.Modifier
 /** Hosted by the main Settings page, with one header and the N2K02Theme. */
 @Composable
 internal fun MovieTogetherLogsPage(modifier: Modifier = Modifier, onBack: () -> Unit) {
-    N2K02UnifiedLogsPage(modifier = modifier, appName = "MovieTogether", onBack = onBack)
+    N2K02UnifiedLogsPage(modifier = modifier, appName = "MovieTogether")
 }
