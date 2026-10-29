@@ -1,6 +1,7 @@
 package com.movietogether.app.watch
 
 import android.content.Context
+import com.movietogether.app.AppLog
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseReference
@@ -22,6 +23,11 @@ object FirebaseRoomDirectory {
     val status = MutableStateFlow("Firebase not configured")
     val invitation = MutableStateFlow<String?>(null)
 
+    /** Fixed event codes: never include UID, room code, address, token, or exception text. */
+    internal fun roomExpired(exists: Boolean, expiry: Long, now: Long): Boolean = !exists || expiry < now
+
+    private fun event(code: String) = AppLog.add("FIREBASE", code)
+
     private var publishedRoom: DatabaseReference? = null
     private var generation: Long = 0L
 
@@ -33,10 +39,12 @@ object FirebaseRoomDirectory {
             FirebaseApp.initializeApp(context.applicationContext) ?: FirebaseApp.getInstance()
         }.getOrNull()
         if (app == null) {
+            event("CONFIG_MISSING")
             status.value = "Firebase Android configuration not installed; direct links still work"
             return null
         }
         if (app.options.projectId != PROJECT_ID || app.options.databaseUrl.isNullOrBlank()) {
+            event("CONFIG_MISMATCH")
             status.value = "Firebase project/database configuration does not match MovieTogether"
             return null
         }
@@ -55,6 +63,7 @@ object FirebaseRoomDirectory {
         }
         val db = runCatching { FirebaseDatabase.getInstance(app).reference.child("rooms") }
             .getOrElse {
+                event("DATABASE_UNAVAILABLE")
                 failure("Realtime Database is not enabled or its URL is missing")
                 return
             }
@@ -67,10 +76,16 @@ object FirebaseRoomDirectory {
         auth.signInAnonymously()
             .addOnSuccessListener {
                 val userId = it.user?.uid
-                if (userId.isNullOrBlank()) failure("Anonymous authentication returned no user")
+                if (userId.isNullOrBlank()) {
+                    event("AUTH_FAILED")
+                    failure("Anonymous authentication returned no user")
+                }
                 else success(db, userId)
             }
-            .addOnFailureListener { failure("Firebase anonymous sign-in failed: ${it.localizedMessage}") }
+            .addOnFailureListener {
+                event("AUTH_FAILED")
+                failure("Firebase anonymous sign-in failed: ${it.localizedMessage}")
+            }
     }
 
     /** Publish an unguessable room code to resolve the host's current address. */
@@ -101,6 +116,7 @@ object FirebaseRoomDirectory {
                         ref.removeValue()
                         return@addOnSuccessListener
                     }
+                    event("ROOM_PUBLISHED")
                     publishedRoom = ref
                     // Server cannot guarantee disconnection cleanup after every process death:
                     // expiry in both rules and read validation is the fallback.
@@ -109,11 +125,16 @@ object FirebaseRoomDirectory {
                     status.value = "Firebase room registered; video still needs direct reachability"
                 }
                 .addOnFailureListener {
-                    if (generation == requestGeneration) status.value =
-                        "Firebase room could not be registered: ${it.localizedMessage}"
+                    if (generation == requestGeneration) {
+                        event("ROOM_PUBLISH_FAILED")
+                        status.value = "Firebase room could not be registered: ${it.localizedMessage}"
+                    }
                 }
         }, { error ->
-            if (generation == requestGeneration) status.value = error
+            if (generation == requestGeneration) {
+                event("ROOM_PUBLISH_FAILED")
+                status.value = error
+            }
         })
     }
 
@@ -129,6 +150,7 @@ object FirebaseRoomDirectory {
 
     fun resolve(context: Context, code: String, result: (Result<RoomAddress>) -> Unit) {
         if (!validCode.matches(code)) {
+            event("ROOM_INVALID_CODE")
             result(Result.failure(IllegalArgumentException("Invalid Firebase room invitation")))
             return
         }
@@ -136,7 +158,8 @@ object FirebaseRoomDirectory {
             root.child(code).get()
                 .addOnSuccessListener { snapshot ->
                     val expiry = snapshot.child("expiresAt").getValue(Long::class.java) ?: 0L
-                    if (!snapshot.exists() || expiry < System.currentTimeMillis()) {
+                    if (roomExpired(snapshot.exists(), expiry, System.currentTimeMillis())) {
+                        event("ROOM_EXPIRED")
                         result(Result.failure(IllegalStateException("Room expired or host offline")))
                     } else {
                         val address = runCatching {
@@ -147,13 +170,19 @@ object FirebaseRoomDirectory {
                                 snapshot.child("secure").getValue(Boolean::class.java) ?: false,
                             )
                         }
+                        if (address.isSuccess) event("ROOM_RESOLVED")
+                        else event("ROOM_RESOLVE_FAILED")
                         result(address)
                     }
                 }
                 .addOnFailureListener {
+                    event("ROOM_RESOLVE_FAILED")
                     result(Result.failure(IllegalStateException("Cannot look up Firebase room: ${it.localizedMessage}")))
                 }
-        }, { error -> result(Result.failure(IllegalStateException(error))) })
+        }, { error ->
+            event("ROOM_RESOLVE_FAILED")
+            result(Result.failure(IllegalStateException(error)))
+        })
     }
 
     /** Accept either a code or the custom-scheme Firebase room link. */
