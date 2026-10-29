@@ -333,7 +333,6 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
             if (page == Screen.LOGS) {
                 MovieTogetherLogsPage(
                     modifier = Modifier.fillMaxSize(),
-                    onBack = { page = Screen.SETTINGS },
                 )
             } else {
             Column(
