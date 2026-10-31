@@ -107,7 +107,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { HOME, HOST, GUEST, SETTINGS, LOGS, UPDATES }
+private enum class Screen { HOME, HOST, GUEST, SETTINGS, UPDATES }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -255,7 +255,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
             connectInvitation(incomingInvitation)
         }
     }
-    BackHandler(enabled = page == Screen.UPDATES || page == Screen.LOGS) { page = Screen.SETTINGS }
+    BackHandler(enabled = page == Screen.UPDATES) { page = Screen.SETTINGS }
 
     Scaffold(
         topBar = {
@@ -271,7 +271,6 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                                 Screen.HOST -> Icons.Rounded.Movie
                                 Screen.GUEST -> Icons.Rounded.Groups
                                 Screen.SETTINGS -> Icons.Rounded.Settings
-                                Screen.LOGS -> Icons.Rounded.Article
                                 Screen.UPDATES -> Icons.Rounded.Info
                             },
                             contentDescription = null,
@@ -284,7 +283,6 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                                 Screen.HOST -> "Host watch party"
                                 Screen.GUEST -> "Watch together"
                                 Screen.SETTINGS -> "Settings"
-                                Screen.LOGS -> "Logs"
                                 Screen.UPDATES -> "About & updates"
                             },
                             maxLines = 1,
@@ -310,7 +308,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                     label = { Text("Home") },
                 )
                 NavigationBarItem(
-                    selected = page in listOf(Screen.SETTINGS, Screen.LOGS, Screen.UPDATES),
+                    selected = page in listOf(Screen.SETTINGS, Screen.UPDATES),
                     onClick = { page = Screen.SETTINGS },
                     icon = {
                         dev.n2k02.updater.N2K02UpdateBadgedIcon(updaterState) {
@@ -330,11 +328,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (page == Screen.LOGS) {
-                MovieTogetherLogsPage(
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
+            run {
             Column(
                 if (inPictureInPicture) Modifier.fillMaxSize()
                 else Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -598,12 +592,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                         },
                     )
                     HorizontalDivider(Modifier.padding(top = 8.dp))
-                    ListItem(
-                        headlineContent = { Text("Logs") },
-                        supportingContent = { Text("Private diagnostic and crash history") },
-                        leadingContent = { Icon(Icons.Rounded.Article, null) },
-                        modifier = Modifier.clickable { page = Screen.LOGS },
-                    )
+                    
                     ListItem(
                         headlineContent = { Text("About & updates") },
                         supportingContent = { Text(if (updaterState.hasSharedPendingUpdate())
@@ -613,7 +602,6 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                         modifier = Modifier.clickable { page = Screen.UPDATES },
                     )
                 }
-                Screen.LOGS -> Unit // Rendered separately to avoid an outer scroll container.
                 Screen.UPDATES -> {
                     val experimental by LiveUpdater.experimentalEnabled.collectAsState()
                     N2K02UpdateScreen(
@@ -626,7 +614,7 @@ private fun MovieTogetherApp(incomingInvitation: String?, inPictureInPicture: Bo
                 }
             }
             }
-            } // End normal page layout; Logs owns its own responsive content layout.
+            } // End normal page layout.
             if (!inPictureInPicture && ((page == Screen.HOST && host.running) ||
                 (page == Screen.GUEST && guest.connected))) {
                 FloatingActionButton(
