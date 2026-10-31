@@ -52,6 +52,9 @@ jobs:
             echo "APK_INPUT=app/build/outputs/apk/release/app-release-unsigned.apk" >> "$GITHUB_ENV"
           fi
 
+      - name: Test public version resolution
+        run: bash .github/scripts/test-public-version.sh
+
       - name: Resolve version and release notes
         env:
           REQUESTED: ${{ github.event.inputs.version }}
@@ -60,7 +63,9 @@ jobs:
         run: |
           set -euo pipefail
           local_last=$(git tag -l 'v[0-9]*' | sed -nE 's/^v([0-9]+[.][0-9])$/\1/p' | sort -V | tail -1 || true)
-          public_last=$(gh api 'repos/N2K02/n2k02.github.io/releases?per_page=100' --jq '.[].tag_name' 2>/dev/null | sed -nE 's/^movietogether-v([0-9]+[.][0-9])(-build-[0-9]+)?$/\1/p' | sort -V | tail -1 || true)
+          # Read the complete app-specific public tag history, including build-N tags.
+          public_last=$(bash .github/scripts/latest-public-version.sh movietogether)
+          public_last="${public_last#v}"
           last=$(printf '%s\n%s\n' "$local_last" "$public_last" | sed '/^$/d' | sort -V | tail -1)
 
           if [ -n "$REQUESTED" ]; then
@@ -75,6 +80,13 @@ jobs:
             ver="$(( n / 10 )).$(( n % 10 ))"
           fi
 
+          # PR APKs may share the latest stable version with an experimental suffix.
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -n "$last" ]; then
+            max=$(printf '%s\n%s\n' "$last" "$ver" | sort -V | tail -1)
+            if [ "$max" != "$ver" ] || [ "$last" = "$ver" ]; then
+              echo "::error::Release $ver must advance past $last"; exit 1
+            fi
+          fi
           echo "VERSION=$ver" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
