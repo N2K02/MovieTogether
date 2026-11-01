@@ -64,7 +64,9 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
         }
     }
 
-    if (isHost) {
+    // Shared pause/play controls already broadcast immediately. Only send
+    // periodic clock corrections while playback is actually advancing.
+    if (isHost && snapshot.playing) {
         LaunchedEffect(player) {
             while (isActive) {
                 RoomRuntime.hostPlayback(player.currentPosition)
@@ -88,7 +90,7 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
 
     // An independent correction loop also covers drift between 1-second host broadcasts
     // and resumes after ExoPlayer finishes buffering; do not seek while still loading.
-    if (!isHost) {
+    if (!isHost && snapshot.playing) {
         LaunchedEffect(player) {
             while (isActive) {
                 val current = RoomRuntime.playback.value
@@ -115,7 +117,10 @@ fun WatchPlayer(uri: Uri, isHost: Boolean, address: RoomAddress?, displayName: S
                 useController = false
             }
         },
-        update = { it.player = player; it.useController = false },
+        update = {
+            if (it.player !== player) it.player = player
+            if (it.useController) it.useController = false
+        },
         modifier = if (inPictureInPicture) Modifier.fillMaxSize()
             else Modifier.fillMaxWidth().height(240.dp),
     )
