@@ -15,6 +15,7 @@ import android.os.Build
 import android.provider.Settings
 import com.movietogether.app.watch.ChatEntry
 import com.movietogether.app.watch.RoomRuntime
+import kotlin.concurrent.thread
 
 /**
  * Android conversation notification with BubbleMetadata.
@@ -39,7 +40,11 @@ object RoomChatBubbleNotifications {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setAllowBubbles(true)
         }
         manager.createNotificationChannel(channel)
-        publishShortcut(app)
+        // ShortcutManager.addDynamicShortcuts is a potentially blocking WorkerThread API.
+        // Never invoke it from the Activity's onCreate/main thread.
+        thread(name = "MovieTogetherShortcut", isDaemon = true) {
+            runCatching { publishShortcut(app) }
+        }
     }
 
     fun setAppForeground(foreground: Boolean) {
@@ -66,12 +71,6 @@ object RoomChatBubbleNotifications {
         )
         val title = "MovieTogether room"
         val preview = message?.let { "${it.sender}: ${it.text}" } ?: "Open room chat"
-        val sender = Person.Builder().setName(message?.sender ?: "MovieTogether").build()
-        val currentUser = Person.Builder().setName("You").build()
-        val style = Notification.MessagingStyle(currentUser)
-            .setConversationTitle(title)
-            .addMessage(message?.text ?: "Room chat is available",
-                message?.timestampMs ?: System.currentTimeMillis(), sender)
         val builder = Notification.Builder(app, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_email)
             .setContentTitle(title)
@@ -79,8 +78,21 @@ object RoomChatBubbleNotifications {
             .setContentIntent(chatPendingIntent)
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setStyle(style)
             .setShortcutId(SHORTCUT_ID)
+        // Framework Person and MessagingStyle(Person) require Android 9 (API 28).
+        // API 26/27 receive the normal notification fallback without invoking them.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val sender = Person.Builder().setName(message?.sender ?: "MovieTogether").build()
+            val currentUser = Person.Builder().setName("You").build()
+            val style = Notification.MessagingStyle(currentUser)
+                .setConversationTitle(title)
+                .addMessage(
+                    message?.text ?: "Room chat is available",
+                    message?.timestampMs ?: System.currentTimeMillis(),
+                    sender,
+                )
+            builder.setStyle(style)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.setBubbleMetadata(Notification.BubbleMetadata.Builder(SHORTCUT_ID)
                 .setDesiredHeight(520)
