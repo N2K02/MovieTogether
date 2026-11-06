@@ -15,6 +15,7 @@ import android.os.Build
 import android.provider.Settings
 import com.movietogether.app.watch.ChatEntry
 import com.movietogether.app.watch.RoomRuntime
+import kotlin.concurrent.thread
 
 /**
  * Android conversation notification with BubbleMetadata.
@@ -39,7 +40,11 @@ object RoomChatBubbleNotifications {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setAllowBubbles(true)
         }
         manager.createNotificationChannel(channel)
-        publishShortcut(app)
+        // ShortcutManager.addDynamicShortcuts is a potentially blocking WorkerThread API.
+        // Never invoke it from the Activity's onCreate/main thread.
+        thread(name = "MovieTogetherShortcut", isDaemon = true) {
+            runCatching { publishShortcut(app) }
+        }
     }
 
     fun setAppForeground(foreground: Boolean) {
