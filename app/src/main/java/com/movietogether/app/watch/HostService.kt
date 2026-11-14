@@ -80,7 +80,7 @@ class HostService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(com.movietogether.app.R.drawable.ic_stat_app)
             .setContentTitle("MovieTogether room is running")
             .setContentText("Selected movie is available to paired viewers")
             .setContentIntent(open)

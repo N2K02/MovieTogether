@@ -72,7 +72,7 @@ object RoomChatBubbleNotifications {
         val title = "MovieTogether room"
         val preview = message?.let { "${it.sender}: ${it.text}" } ?: "Open room chat"
         val builder = Notification.Builder(app, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setSmallIcon(com.movietogether.app.R.drawable.ic_stat_app)
             .setContentTitle(title)
             .setContentText(preview)
             .setContentIntent(chatPendingIntent)
