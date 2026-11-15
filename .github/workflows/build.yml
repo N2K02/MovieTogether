@@ -113,6 +113,16 @@ jobs:
             echo "Download the signed APK below and install it on your phone."
           } > release-notes.md
 
+
+      - name: Resolve standardized experimental release name
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/experimental_naming.py --self-test
+          python3 .github/scripts/experimental_naming.py "$GITHUB_REPOSITORY" "$APP" "$GITHUB_RUN_NUMBER" "$PR_NUMBER"
       - name: Verify registered Firebase Android clients
         shell: bash
         run: |
@@ -192,7 +202,7 @@ jobs:
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             tag="experimental-pr-$PR_NUMBER-run-$GITHUB_RUN_NUMBER"
-            title="MovieTogether experimental · PR #$PR_NUMBER · build #$GITHUB_RUN_NUMBER"
+            title="$EXPERIMENTAL_TITLE"
             target="$PR_HEAD_SHA"
             extra=(--prerelease --latest=false)
           else
