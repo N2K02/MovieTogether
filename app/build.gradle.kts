@@ -37,7 +37,7 @@ android {
 }
 
 dependencies {
-    implementation("dev.n2k02:theme:0.1.14")
+    implementation("dev.n2k02:theme:0.1.15")
     implementation("dev.n2k02:updater:0.1.36")
     implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
@@ -47,11 +47,11 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
-    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-database")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
 }
 
  
